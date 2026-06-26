@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    image: node:20-alpine
+    container_name: shopify_app
+    # Оставляем контейнер запущенным, чтобы заходить в него
+    command: sh -c "npm install -g @shopify/cli && tail -f /dev/null"
+    ports:
+      - "3000:3000"
+      - "3456:3456" # Порт для Shopify CLI туннеля
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydb?schema=public
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
