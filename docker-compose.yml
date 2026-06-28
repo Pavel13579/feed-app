@@ -21,7 +21,8 @@ services:
     command: sh -c "npm install -g @shopify/cli && tail -f /dev/null"
     ports:
       - "3000:3000"
-      - "3456:3456" # Порт для Shopify CLI туннеля
+      - "3456:3456"
+      - "5555:5555" # Порт для Shopify CLI туннеля
     volumes:
       - .:/app
     working_dir: /app
