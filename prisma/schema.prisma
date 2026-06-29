@@ -38,4 +38,26 @@ model Shop {
   shopDomain String   @unique
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  products    Product[]
+}
+
+model Product {
+  id              String   @id @default(uuid()) 
+  shopId          String   
+  shopifyId       String  
+  title           String
+  descriptionHtml String?  
+  vendor          String?
+  productType     String?
+  status          String   
+  tags            String?  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, shopifyId])
+  
+  @@index([shopId])
 }
