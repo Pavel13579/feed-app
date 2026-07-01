@@ -57,6 +57,24 @@ model Product {
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
+  variants Variant[]
+
   @@unique([shopId, shopifyId])
   @@index([shopId])
+}
+
+model Variant {
+  id                String   @id @default(uuid())
+  productId         String
+  shopifyId         String
+  sku               String?
+  barcode           String?
+  price             Decimal  @db.Decimal(10, 2)
+  compareAtPrice    Decimal? @db.Decimal(10, 2)
+  inventoryQuantity Int
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, shopifyId])
+  @@index([productId])
 }
