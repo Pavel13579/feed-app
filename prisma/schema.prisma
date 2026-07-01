@@ -58,6 +58,7 @@ model Product {
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   variants Variant[]
+  images   Image[]
 
   @@unique([shopId, shopifyId])
   @@index([shopId])
@@ -72,6 +73,21 @@ model Variant {
   price             Decimal  @db.Decimal(10, 2)
   compareAtPrice    Decimal? @db.Decimal(10, 2)
   inventoryQuantity Int
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, shopifyId])
+  @@index([productId])
+}
+
+
+model Image {
+  id        String  @id @default(uuid())
+  productId String
+  shopifyId String
+  url       String
+  altText   String? 
+  position  Int    
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
