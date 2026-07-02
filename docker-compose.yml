@@ -27,7 +27,7 @@ services:
       - .:/app
     working_dir: /app
     environment:
-      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydb?schema=public
+      - DATABASE_URL=postgresql://myuser:mypassword@postgres:5432/mydb?schema=public   
     depends_on:
       - postgres
 
