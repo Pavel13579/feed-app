@@ -15,9 +15,26 @@ import {
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { productsFromShopify } from "app/models/sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const {admin} = await authenticate.admin(request);
+
+  try{
+    const data = await productsFromShopify(admin);
+
+    var count = data?.products?.edges?.length
+
+    for(var i = 0; i < count; i++){
+      console.log(JSON.stringify(data.products.edges[i].node, null, 2));
+    }
+
+    console.log(`Product count: ${count}`);
+
+  }catch(error){
+    console.log("Failed to get products", error);
+  }
+
 
   return null;
 };
