@@ -21,12 +21,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const {admin} = await authenticate.admin(request);
 
   try{
-    const data = await productsFromShopify(admin);
+    const products = await productsFromShopify(admin);
 
-    var count = data?.products?.edges?.length
+    var count = products.length;
 
     for(var i = 0; i < count; i++){
-      console.log(JSON.stringify(data.products.edges[i].node, null, 2));
+      console.log(JSON.stringify(products[i], null, 2));
     }
 
     console.log(`Product count: ${count}`);

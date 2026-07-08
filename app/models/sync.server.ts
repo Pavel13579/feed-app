@@ -1,9 +1,7 @@
-export async function productsFromShopify(admin: any) {
-  const response = await admin.graphql(`#graphql
-  query syncProducts($first: Int!) {
-    products(first: $first) {
+const GRAPHQL_QUERY = `#graphql
+  query FetchProductsPagination($cursor: String) {
+    products(first: 250, after: $cursor) {
       edges {
-        cursor
         node {
           id
           title
@@ -12,7 +10,7 @@ export async function productsFromShopify(admin: any) {
           productType
           status
           tags
-          variants(first: 5) {
+          variants(first: 10) {
             edges {
               node {
                 id
@@ -27,7 +25,6 @@ export async function productsFromShopify(admin: any) {
           images(first: 5) {
             edges {
               node {
-                id
                 url
                 altText
               }
@@ -41,13 +38,36 @@ export async function productsFromShopify(admin: any) {
       }
     }
   }
-`, {
-    variables: {
-      first: 5,
-    },
-  });
+`;
 
-  const responseJson = await response.json();
-  
-  return responseJson.data;
+export async function productsFromShopify(admin: any) {
+  var allProducts: any[] = [];
+  var hasNextPage = true;
+  var cursor: string | null = null;
+
+  while (hasNextPage) {
+ 
+    const response = await admin.graphql(GRAPHQL_QUERY, {
+      variables: {
+        cursor: cursor,
+      },
+    });
+
+    const responseJson: any = await response.json();
+    const productsData = responseJson.data?.products;
+
+    if (!productsData) {
+      break;
+    }
+
+    const fetchedProducts = productsData.edges.map((edge: any) => edge.node);
+    allProducts = [...allProducts, ...fetchedProducts];
+
+    hasNextPage = productsData.pageInfo.hasNextPage;
+    cursor = productsData.pageInfo.endCursor;
+
+    console.log(`Loaded products: ${fetchedProducts.length}. Total: ${allProducts.length}`);
+  }
+
+  return allProducts;
 }
