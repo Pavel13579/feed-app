@@ -142,9 +142,13 @@ export async function syncAllProducts(admin: any, shopDomain: string) {
 
   var cnt = 0;
   for(const prod of products){
-      const tempObject = mapShopifyProduct(prod);
+    const tempObject = mapShopifyProduct(prod);
+    try{
       await upsertFunc(shopDomain, tempObject);
       cnt = cnt + 1;
+    }catch(error){
+      console.log("Failed to sync product");
+    }
   }
 
   return cnt;

@@ -31,8 +31,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     console.log(`Product count: ${count}`);
 
- //   await syncAllProducts(admin, session.shop);
-
   }catch(error){
     console.log("Failed to get products", error);
   }

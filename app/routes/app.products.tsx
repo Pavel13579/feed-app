@@ -28,7 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const shopData = await prisma.shop.findUnique({
     where: { shopDomain: session.shop },
-    select: { updatedAt: true },
+    select: { lastSyncedAt: true },
   });
 
   const defaultProducts = await prisma.product.findMany({ 
@@ -46,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }));
 
   return json({serializedProducts,
-    lastSync: shopData?.updatedAt || null,
+    lastSync: shopData?.lastSyncedAt || null,
   });
 };
 
@@ -55,6 +55,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try{
     const cnt = await syncAllProducts(admin, session.shop);
+
+    await prisma.shop.update({
+      where: {shopDomain: session.shop},
+      data: {lastSyncedAt: new Date()}
+    })
+
     console.log("Synced");
     return json({ success: true, cnt });
   }catch(error){
@@ -77,7 +83,7 @@ export default function ProductPage() {
   if(lastSync == null){
     formattedDate = "Never";
   }else{
-    formattedDate = new Date(lastSync).toLocaleString();
+    formattedDate = `${getTimeAfterUpdate(lastSync)}`;
   }
 
   return (
@@ -86,12 +92,7 @@ export default function ProductPage() {
       subtitle={`Last sync: ${formattedDate}`}
       primaryAction = {
         <Form method="post">
-          <Button
-          submit
-          variant="primary"
-          loading={isSyncing}
-          disabled={isSyncing}
-          >
+          <Button submit variant="primary" loading={isSyncing} disabled={isSyncing}>
           Sync Now
           </Button>
         </Form>
@@ -104,6 +105,12 @@ export default function ProductPage() {
             {actionData?.success && !isSyncing && (
               <Banner tone="success" title="Sync Done">
                 <p>Synced: <strong>{actionData.cnt}</strong></p>
+              </Banner>
+            )}
+
+            {actionData?.success === false && !isSyncing && (
+              <Banner tone="critical" title="Synchronization failed">
+                <p>Error occurred due synchronization</p>
               </Banner>
             )}
 
@@ -157,4 +164,27 @@ export default function ProductPage() {
       </Layout>
     </Page>
   );
+}
+
+
+function getTimeAfterUpdate(date: string){
+  const now = new Date();
+  const dateTemp = new Date(date);
+
+  const seconds = Math.floor((now.getTime() - dateTemp.getTime()) / 1000);
+  if (seconds < 60) {
+    return "Now";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  if(minutes < 60){
+    return `Updated ${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+  }
+
+  return date.toLocaleString();
 }
