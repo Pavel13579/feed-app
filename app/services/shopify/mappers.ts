@@ -1,4 +1,4 @@
-export async function mapShopifyProduct(node: any) {
+export function mapShopifyProduct(node: any) {
     const parsedId = parseIdFromGid(node.id);
     
     const product = {
@@ -46,7 +46,7 @@ export async function mapShopifyProduct(node: any) {
 }
 
 
-function parseIdFromGid(gid: unknown): string {
+function parseIdFromGid(gid: any): string {
   if (typeof gid !== 'string') {
     return '';
   }

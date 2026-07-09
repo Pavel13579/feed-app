@@ -15,10 +15,10 @@ import {
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { productsFromShopify } from "app/models/sync.server";
+import { productsFromShopify, syncAllProducts } from "app/models/sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const {admin} = await authenticate.admin(request);
+  const {admin, session} = await authenticate.admin(request);
 
   try{
     const products = await productsFromShopify(admin);
@@ -30,6 +30,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     console.log(`Product count: ${count}`);
+
+    await syncAllProducts(admin, session.shop);
 
   }catch(error){
     console.log("Failed to get products", error);
