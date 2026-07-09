@@ -140,8 +140,12 @@ export async function upsertFunc(shopDomain: string, mappedProduct: any) {
 export async function syncAllProducts(admin: any, shopDomain: string) {
   const products = await productsFromShopify(admin);
 
+  var cnt = 0;
   for(const prod of products){
       const tempObject = mapShopifyProduct(prod);
       await upsertFunc(shopDomain, tempObject);
+      cnt = cnt + 1;
   }
+
+  return cnt;
 }
