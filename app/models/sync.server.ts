@@ -1,5 +1,7 @@
 import { mapShopifyProduct } from "app/services/shopify/mappers";
 import prisma from "../db.server"; 
+import { AdminApiContext } from "@shopify/shopify-app-remix/server";
+import { IGraphQlResponseType, IMappedProduct } from "app/types/types";
 
 const GRAPHQL_QUERY = `#graphql
   query FetchProductsPagination($cursor: String) {
@@ -44,10 +46,10 @@ const GRAPHQL_QUERY = `#graphql
   }
 `;
 
-export async function productsFromShopify(admin: any) {
-  var allProducts: any[] = [];
-  var hasNextPage = true;
-  var cursor: string | null = null;
+export async function productsFromShopify(admin: AdminApiContext) : Promise<IGraphQlResponseType[]> {
+  let allProducts: IGraphQlResponseType[] = [];
+  let hasNextPage = true;
+  let cursor: string | null = null;
 
   while (hasNextPage) {
  
@@ -57,14 +59,21 @@ export async function productsFromShopify(admin: any) {
       },
     });
 
-    const responseJson: any = await response.json();
+    const responseJson = (await response.json()) as {
+      data?: {
+        products?: {
+          edges: Array<{ node: IGraphQlResponseType }>;
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
+      };
+    };
     const productsData = responseJson.data?.products;
 
     if (!productsData) {
       break;
     }
 
-    const fetchedProducts = productsData.edges.map((edge: any) => edge.node);
+    const fetchedProducts = productsData.edges.map((edge) => edge.node);
     allProducts = [...allProducts, ...fetchedProducts];
 
     hasNextPage = productsData.pageInfo.hasNextPage;
@@ -76,7 +85,7 @@ export async function productsFromShopify(admin: any) {
   return allProducts;
 }
 
-export async function upsertFunc(shopDomain: string, mappedProduct: any) {
+export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProduct) {
       return prisma.$transaction(async (pris) => {
           const shop = await pris.shop.upsert({
             where: { shopDomain },
@@ -118,7 +127,7 @@ export async function upsertFunc(shopDomain: string, mappedProduct: any) {
 
           if (mappedProduct.variants?.length > 0) {
               await pris.variant.createMany({
-                data: mappedProduct.variants.map((variant: any) => ({
+                data: mappedProduct.variants.map((variant) => ({
                   ...variant,
                   productId: product.id, 
                 })),
@@ -127,7 +136,7 @@ export async function upsertFunc(shopDomain: string, mappedProduct: any) {
 
           if(mappedProduct.images?.length > 0){
             await pris.image.createMany({
-                data: mappedProduct.images.map((image: any) => ({
+                data: mappedProduct.images.map((image) => ({
                   ...image,
                   productId: product.id,
                 })),
@@ -137,10 +146,10 @@ export async function upsertFunc(shopDomain: string, mappedProduct: any) {
 }
 
 
-export async function syncAllProducts(admin: any, shopDomain: string) {
+export async function syncAllProducts(admin: AdminApiContext, shopDomain: string) {
   const products = await productsFromShopify(admin);
 
-  var cnt = 0;
+  let cnt = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{

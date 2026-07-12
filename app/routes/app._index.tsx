@@ -23,9 +23,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try{
     const products = await productsFromShopify(admin);
 
-    var count = products.length;
+    let count = products.length;
 
-    for(var i = 0; i < count; i++){
+    for(let i = 0; i < count; i++){
       console.log(JSON.stringify(products[i], null, 2));
     }
 

@@ -79,7 +79,7 @@ export default function ProductPage() {
   const navigation = useNavigation();
   const isSyncing = navigation.state === "submitting";
 
-  var formattedDate;
+  let formattedDate;
   if(lastSync == null){
     formattedDate = "Never";
   }else{
@@ -186,5 +186,5 @@ function getTimeAfterUpdate(date: string){
     return `${hours} hour${hours > 1 ? "s" : ""} ago`;
   }
 
-  return date.toLocaleString();
+  return dateTemp.toLocaleString();
 }

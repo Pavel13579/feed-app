@@ -1,4 +1,6 @@
-export function mapShopifyProduct(node: any) {
+import { IGraphQlResponseType, IMappedProduct } from "app/types/types";
+
+export function mapShopifyProduct(node: IGraphQlResponseType): IMappedProduct {
     const parsedId = parseIdFromGid(node.id);
     
     const product = {
@@ -12,7 +14,7 @@ export function mapShopifyProduct(node: any) {
   };
 
   const variantsEdges = node.variants?.edges || [];
-  const variants = variantsEdges.map((edge: any, index: number) => {
+  const variants = variantsEdges.map((edge) => {
     const vNode = edge.node;
     const parsedIdVariant = parseIdFromGid(vNode.id);
     return {
@@ -26,7 +28,7 @@ export function mapShopifyProduct(node: any) {
   });
 
   const imagesEdges = node.images?.edges || [];
-  const images = imagesEdges.map((edge: any, index: number) => {
+  const images = imagesEdges.map((edge, index: number) => {
     const iNode = edge.node;
     const parsedIdImage = parseIdFromGid(iNode.id);
     return{
@@ -46,11 +48,7 @@ export function mapShopifyProduct(node: any) {
 }
 
 
-function parseIdFromGid(gid: any): string {
-  if (typeof gid !== 'string') {
-    return '';
-  }
-  
+function parseIdFromGid(gid: string): string {  
   const parts = gid.split('/');
   return parts[parts.length - 1] || '';
 }
