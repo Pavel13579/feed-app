@@ -16,9 +16,10 @@ import {
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { productsFromShopify, syncAllProducts } from "app/models/sync.server";
+import db from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const {admin, session} = await authenticate.admin(request);
+  const {admin} = await authenticate.admin(request);
 
   try{
     const products = await productsFromShopify(admin);
