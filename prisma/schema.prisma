@@ -41,6 +41,7 @@ model Shop {
   lastSyncedAt DateTime?
 
   products Product[]
+  feeds    Feed[]
 }
 
 model Product {
@@ -94,4 +95,22 @@ model Image {
 
   @@unique([productId, shopifyId])
   @@index([productId])
+}
+
+
+model Feed {
+  id              String    @id @default(uuid())
+  shopId          String
+  channel         String    
+  name            String   
+  token           String    @unique
+  content         String?   @db.Text
+  lastGeneratedAt DateTime?
+  itemCount       Int       @default(0) 
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
 }
