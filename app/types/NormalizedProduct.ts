@@ -20,6 +20,7 @@ export interface NormalizedVariant {
   price: string;          
   compareAtPrice: string | null;
   inventoryQuantity: number;
-  isAvailable: boolean; 
+  isAvailable: boolean;
+  currency: string; 
 }
 

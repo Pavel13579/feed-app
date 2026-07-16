@@ -7,7 +7,7 @@ export type DbProductWithRelations = Product & {
 };
 
 
-export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string): NormalizedProduct {
+export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string = "HUF"): NormalizedProduct {
   const productLink = product.onlineStoreUrl ? product.onlineStoreUrl : `https://${shopDomain}/products/${product.shopifyId}`;
 
   const sortedImages = [...product.images]
@@ -26,6 +26,7 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     compareAtPrice: v.compareAtPrice ? v.compareAtPrice.toString() : null,
     inventoryQuantity: v.inventoryQuantity,
     isAvailable: v.inventoryQuantity > 0,
+    currency: currency,
   }));
 
   return {
