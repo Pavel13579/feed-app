@@ -16,6 +16,7 @@ import { json} from "@remix-run/node";
 import { googleAdapter } from "app/services/feeds/adapters/google";
 import { Decimal } from "@prisma/client/runtime/library";
 import { dbProductToNormalized } from "app/models/normalizer.server";
+import { generateFeed } from "app/models/feed.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -37,67 +38,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  const dbProducts = await db.product.findMany({
-    where: { shopId: shop.id },
-    include: {
-      variants: true,
-      images: {
-        orderBy: { position: "asc" },
-      },
-    },
-  });
-
-  const normalizedProducts = dbProducts.map((product) =>
-    dbProductToNormalized(product, shopDomain)
-  );
-
-  const xmlContent = googleAdapter.render(normalizedProducts, shopDomain);
-
-  const totalItems = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
-
-  const existingFeed = await db.feed.findFirst({
+  let feed = await db.feed.findFirst({
     where: {
       shopId: shop.id,
       channel: "google",
     },
   });
 
-  if (existingFeed) {
-    const updatedFeed = await db.feed.update({
-      where: { id: existingFeed.id },
+  if (!feed) {
+    feed = await db.feed.create({
       data: {
-        content: xmlContent,
-        itemCount: totalItems,
-        lastGeneratedAt: new Date(),
+        shopId: shop.id,
+        channel: "google",
+        name: "Google Shopping Feed",
+        token: crypto.randomUUID(),
+        content: "",
+        itemCount: 0,
       },
-    });
-
-    return json({ 
-      success: true, 
-      message: "Google feed updated with real XML", 
-      feed: updatedFeed 
     });
   }
 
-  const token = crypto.randomUUID(); 
+  try {
+    const updatedFeed = await generateFeed(feed.id);
 
-  const newFeed = await db.feed.create({
-    data: {
-      shopId: shop.id,
-      channel: "google",
-      name: "Google Shopping Feed",
-      token: token,
-      content: xmlContent,
-      itemCount: totalItems,
-      lastGeneratedAt: new Date(),
-    },
-  });
-
-  return json({ 
-    success: true, 
-    message: "Google feed created with real XML", 
-    feed: newFeed 
-  });
+    return json({ 
+      success: true, 
+      message: "Feed successfully updated", 
+      feed: updatedFeed 
+    });
+  } catch (error: any) {
+    return json({ 
+      success: false, 
+      message: `Generation failed: ${error.message}` 
+    }, { status: 500 });
+  }
 };
 
 export default function SyncPage() {
