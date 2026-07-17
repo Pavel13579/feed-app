@@ -32,10 +32,8 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
         : product.link;
 
       const googleItem: GoogleItem = {
-        id: variant.shopifyId, 
-        
+        id: variant.shopifyId,    
         item_group_id: product.shopifyId,
-        
         title: product.title,
         description: product.descriptionHtml || product.title, 
         link: itemLink,
@@ -67,8 +65,60 @@ export const googleAdapter: FeedAdapter = {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
     }
 
-    return JSON.stringify(items, null, 2);
+    const xmlItems = items.map((item) => {
+      const fields: string[] = [
+        `      <g:id>${escapeXml(item.id)}</g:id>`,
+        `      <g:item_group_id>${escapeXml(item.item_group_id)}</g:item_group_id>`,
+        `      <title>${escapeXml(item.title)}</title>`,
+        `      <description>${wrapInCData(item.description)}</description>`,
+        `      <link>${escapeXml(item.link)}</link>`,
+        `      <g:image_link>${escapeXml(item.image_link)}</g:image_link>`,
+        `      <g:availability>${item.availability}</g:availability>`,
+        `      <g:price>${escapeXml(item.price)}</g:price>`,
+        `      <g:condition>${item.condition}</g:condition>`,
+        `      <g:identifier_exists>${item.identifier_exists}</g:identifier_exists>`
+      ];
+
+      if (item.brand) {
+        fields.push(`<g:brand>${escapeXml(item.brand)}</g:brand>`);
+      }
+      if (item.gtin) {
+        fields.push(`<g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
+      }
+      if (item.mpn) {
+        fields.push(`<g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+      }
+
+      return `<item>\n${fields.join('\n')}\n</item>`;
+    }).join('\n');
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+            <channel>
+              <title>${escapeXml(shopDomain)} Store Feed</title>
+              <link>https://${escapeXml(shopDomain)}</link>
+              <description>Google Merchant Center Product Feed</description>
+          ${xmlItems}
+            </channel>
+          </rss>`;
   }
 };
 
+function escapeXml(unsafe: string): string {
+  return unsafe.replace(/[<>&'"]/g, (char) => {
+    switch (char) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '"': return '&quot;';
+      case "'": return '&apos;';
+      default: return char;
+    }
+  });
+}
 
+
+function wrapInCData(html: string): string {
+  const cleanHtml = html.replace(/\]\]>/g, ']]&gt;');
+  return `<![CDATA[${cleanHtml}]]>`;
+}

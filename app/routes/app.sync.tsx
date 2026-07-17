@@ -13,6 +13,9 @@ import { authenticate } from "../shopify.server";
 import { productsFromShopify } from "app/models/sync.server";
 import db from "../db.server";
 import { json} from "@remix-run/node";
+import { googleAdapter } from "app/services/feeds/adapters/google";
+import { Decimal } from "@prisma/client/runtime/library";
+import { dbProductToNormalized } from "app/models/normalizer.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
@@ -34,6 +37,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  const dbProducts = await db.product.findMany({
+    where: { shopId: shop.id },
+    include: {
+      variants: true,
+      images: {
+        orderBy: { position: "asc" },
+      },
+    },
+  });
+
+  const normalizedProducts = dbProducts.map((product) =>
+    dbProductToNormalized(product, shopDomain)
+  );
+
+  const xmlContent = googleAdapter.render(normalizedProducts, shopDomain);
+
+  const totalItems = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
 
   const existingFeed = await db.feed.findFirst({
     where: {
@@ -43,14 +63,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   if (existingFeed) {
+    const updatedFeed = await db.feed.update({
+      where: { id: existingFeed.id },
+      data: {
+        content: xmlContent,
+        itemCount: totalItems,
+        lastGeneratedAt: new Date(),
+      },
+    });
+
     return json({ 
       success: true, 
-      message: "Google feed exists", 
-      feed: existingFeed 
+      message: "Google feed updated with real XML", 
+      feed: updatedFeed 
     });
   }
 
- 
   const token = crypto.randomUUID(); 
 
   const newFeed = await db.feed.create({
@@ -59,14 +87,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       channel: "google",
       name: "Google Shopping Feed",
       token: token,
-      content: null, 
-      itemCount: 0,
+      content: xmlContent,
+      itemCount: totalItems,
+      lastGeneratedAt: new Date(),
     },
   });
 
   return json({ 
     success: true, 
-    message: "Success", 
+    message: "Google feed created with real XML", 
     feed: newFeed 
   });
 };
@@ -125,3 +154,4 @@ export default function SyncPage() {
     </Page>
   );
 }
+
