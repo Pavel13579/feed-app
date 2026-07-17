@@ -115,7 +115,7 @@ export default function FeedPage() {
                       <strong>Items (variants) processed:</strong> <Badge tone="info">{actionData.feed.itemCount.toString()}</Badge>
                     </List.Item>
                     <List.Item>
-                        <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems}</Badge>
+                        <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems.toString()}</Badge>
                     </List.Item>
                     <List.Item>
                       <strong>XML Size:</strong> {actionData.feed.sizeKb} KB
