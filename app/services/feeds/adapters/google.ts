@@ -58,11 +58,15 @@ export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "googleFeed.xml",
   
-  render(products: NormalizedProduct[], shopDomain: string): string {
+  render(products: NormalizedProduct[], shopDomain: string, context?: { skippedCount: number }): string {
     const { items, skippedCount } = mapProductsToGoogleItems(products);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
+    }
+
+    if (context) {
+      context.skippedCount = skippedCount;
     }
 
     const xmlItems = items.map((item) => {

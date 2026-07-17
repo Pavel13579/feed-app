@@ -28,25 +28,33 @@ export async function generateFeed(feedId: string) {
 
     if (dbProducts.length === 0) {
       const emptyXml = adapter.render([], shopDomain);
-      return await db.feed.update({
+      const updatedFeed = await db.feed.update({
         where: { id: feedId },
         data: { content: emptyXml, itemCount: 0, lastGeneratedAt: new Date() },
       });
+      
+      return {
+        ...updatedFeed,
+        skippedItems: 0,
+      };
     }
 
     const normalizedProducts = dbProducts.map((product) =>
       dbProductToNormalized(product, shopDomain)
     );
 
-    const xmlContent = adapter.render(normalizedProducts, shopDomain);
+    const context = { skippedCount: 0 };
+
+    const xmlContent = adapter.render(normalizedProducts, shopDomain, context);
     const totalItems = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
+    
+    const skippedItems = context.skippedCount;
 
     if (dbProducts.length > 0 && totalItems === 0) {
-        throw new Error(
-        "Total itmes 0. Failed to generate feed");
+      throw new Error("Total items 0. Failed to generate feed");
     }
 
-    return await db.feed.update({
+    const updatedFeed = await db.feed.update({
       where: { id: feedId },
       data: {
         content: xmlContent,
@@ -54,6 +62,11 @@ export async function generateFeed(feedId: string) {
         lastGeneratedAt: new Date(),
       },
     });
+
+    return {
+      ...updatedFeed,
+      skippedItems: skippedItems,
+    };
 
   } catch (error) {
     console.error(`Failed for feed ${feedId}:`, error);

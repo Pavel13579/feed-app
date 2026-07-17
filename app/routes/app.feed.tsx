@@ -8,6 +8,8 @@ import {
   BlockStack,
   Text,
   Banner,
+  List,
+  Badge,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import { productsFromShopify } from "app/models/sync.server";
@@ -60,21 +62,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const updatedFeed = await generateFeed(feed.id);
+    const xmlSizeBytes = Buffer.byteLength(updatedFeed.content || "", "utf8");
+    const xmlSizeKb = (xmlSizeBytes / 1024).toFixed(2);
 
     return json({ 
       success: true, 
       message: "Feed successfully updated", 
-      feed: updatedFeed 
+      feed: {
+        itemCount: updatedFeed.itemCount,
+        skippedItems: updatedFeed.skippedItems,
+        lastGeneratedAt: updatedFeed.lastGeneratedAt,
+        sizeKb: xmlSizeKb,
+        preview: updatedFeed.content ? updatedFeed.content.substring(0, 500) + "..." : ""
+      }
     });
   } catch (error: any) {
     return json({ 
       success: false, 
-      message: `Generation failed: ${error.message}` 
+      message: `Generation failed: ${error.message}`,
+      feed: null 
     }, { status: 500 });
   }
 };
 
-export default function SyncPage() {
+export default function FeedPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
@@ -87,14 +98,40 @@ export default function SyncPage() {
 
   return (
     <Page 
-      title="Feed"
+      title="Feed Settings"
       backAction={{ content: "Back", url: "/app" }} 
     >
       <Layout>
         <Layout.Section>
-          {actionData?.success && (
+          {actionData?.success && actionData.feed && (
             <div style={{ marginBottom: "16px" }}>
-              <Banner title="Success" tone="success">
+              <Banner title="Feed Generated Successfully" tone="success">
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodyMd">
+                    {actionData.message}
+                  </Text>
+                  <List>
+                    <List.Item>
+                      <strong>Items (variants) processed:</strong> <Badge tone="info">{actionData.feed.itemCount.toString()}</Badge>
+                    </List.Item>
+                    <List.Item>
+                        <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems}</Badge>
+                    </List.Item>
+                    <List.Item>
+                      <strong>XML Size:</strong> {actionData.feed.sizeKb} KB
+                    </List.Item>
+                    <List.Item>
+                      <strong>Generated At:</strong> {new Date(actionData.feed.lastGeneratedAt!).toLocaleString()}
+                    </List.Item>
+                  </List>
+                </BlockStack>
+              </Banner>
+            </div>
+          )}
+
+          {actionData?.success === false && (
+            <div style={{ marginBottom: "16px" }}>
+              <Banner title="Generation Failed" tone="critical">
                 <p>{actionData.message}</p>
               </Banner>
             </div>
@@ -104,10 +141,10 @@ export default function SyncPage() {
             <BlockStack gap="400">
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Generate feed to db
+                  Google Shopping Feed
                 </Text>
                 <Text as="p" variant="bodyMd">
-                  Press button
+                  Click the button below to force rebuild your product feed. This will compile all active variants and map them into standard Google Merchant Center format.
                 </Text>
               </BlockStack>
 
@@ -117,12 +154,33 @@ export default function SyncPage() {
                   size="large" 
                   onClick={handleSync}
                   loading={isLoading}
+                  disabled={isLoading}
                 >
-                  {isLoading ? "Generation" : "Generate feed"}
+                  {isLoading ? "Generating XML..." : "Generate feed"}
                 </Button>
               </BlockStack>
             </BlockStack>
           </Card>
+
+          {actionData?.success && actionData.feed?.preview && (
+            <div style={{ marginTop: "16px" }}>
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingSm">XML Preview (First 500 chars):</Text>
+                  <pre style={{ 
+                    background: "#f4f6f8", 
+                    padding: "12px", 
+                    borderRadius: "4px", 
+                    overflowX: "auto",
+                    fontSize: "12px",
+                    fontFamily: "monospace"
+                  }}>
+                    {actionData.feed.preview}
+                  </pre>
+                </BlockStack>
+              </Card>
+            </div>
+          )}
         </Layout.Section>
       </Layout>
     </Page>
