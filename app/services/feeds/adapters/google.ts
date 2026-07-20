@@ -20,12 +20,14 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
       const variantCurrency = variant.currency || "HUF"; 
       const formattedPrice = `${priceValue} ${variantCurrency}`;
 
-      const brand = product.vendor || null;
-      const gtin = variant.barcode || null;
-      const mpn = variant.sku || null;
+      const rawGtin = variant.barcode?.trim() || null;
+
+      const gtin = isValidGtin(rawGtin) ? rawGtin : null; 
+      const mpn = variant.sku?.trim() || null;
+      const brand = product.vendor?.trim() || null;
       
-      const hasIdentifiers = !!(brand || gtin || mpn);
-      const identifierExists: "true" | "false" = hasIdentifiers ? "true" : "false";
+      const hasUniqueIdentifier = !!(gtin || mpn);
+      const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
 
       const itemLink = variant.shopifyId 
         ? `${product.link}?variant=${variant.shopifyId.replace('gid://shopify/ProductVariant/', '')}`
@@ -121,6 +123,12 @@ function escapeXml(unsafe: string): string {
   });
 }
 
+
+function isValidGtin(gtin: string | null | undefined): boolean {
+  if (!gtin) return false;
+  const cleanGtin = gtin.trim();
+  return /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(cleanGtin);
+}
 
 function wrapInCData(html: string): string {
   const cleanHtml = html.replace(/\]\]>/g, ']]&gt;');
