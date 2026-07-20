@@ -6,6 +6,7 @@ export interface IGraphQlResponseType {
   productType?: string;
   status: string;
   tags: string[];
+  onlineStoreUrl?: string | null;
   variants?: {
     edges: Array<{
       node: {
@@ -39,6 +40,7 @@ export interface IMappedProduct {
   productType?: string | null;
   status: string;
   tags: string | null;
+  onlineStoreUrl?: string | null;
   variants: Array<{
     shopifyId: string;
     sku?: string | null;

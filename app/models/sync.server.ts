@@ -15,6 +15,7 @@ const GRAPHQL_QUERY = `#graphql
           productType
           status
           tags
+          onlineStoreUrl
           variants(first: 10) {
             edges {
               node {
@@ -107,6 +108,7 @@ export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProdu
               productType: mappedProduct.productType,
               status: mappedProduct.status,
               tags: mappedProduct.tags,
+              onlineStoreUrl: mappedProduct.onlineStoreUrl,
             },
             create: {
               shopifyId: mappedProduct.shopifyId,
@@ -116,6 +118,7 @@ export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProdu
               productType: mappedProduct.productType,
               status: mappedProduct.status,
               tags: mappedProduct.tags,
+              onlineStoreUrl: mappedProduct.onlineStoreUrl,
               shopId: shop.id,
             },
           });

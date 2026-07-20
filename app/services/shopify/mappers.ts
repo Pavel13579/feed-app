@@ -11,6 +11,7 @@ export function mapShopifyProduct(node: IGraphQlResponseType): IMappedProduct {
     productType: node.productType,
     status: node.status,
     tags: node.tags ? node.tags.join(', ') : null,
+    onlineStoreUrl: node.onlineStoreUrl || null,
   };
 
   const variantsEdges = node.variants?.edges || [];
