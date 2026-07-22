@@ -39,7 +39,7 @@ export interface IMappedProduct {
   vendor?: string | null;
   productType?: string | null;
   status: string;
-  tags: string | null;
+  tags: string[];
   onlineStoreUrl?: string | null;
   variants: Array<{
     shopifyId: string;
