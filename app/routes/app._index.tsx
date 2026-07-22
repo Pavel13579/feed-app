@@ -19,24 +19,7 @@ import { productsFromShopify, syncAllProducts } from "app/models/sync.server";
 import db from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const {admin} = await authenticate.admin(request);
-
-  try{
-    const products = await productsFromShopify(admin);
-
-    let count = products.length;
-
-    for(let i = 0; i < count; i++){
-      console.log(JSON.stringify(products[i], null, 2));
-    }
-
-    console.log(`Product count: ${count}`);
-
-  }catch(error){
-    console.log("Failed to get products", error);
-  }
-
-
+  await authenticate.admin(request);
   return null;
 };
 
