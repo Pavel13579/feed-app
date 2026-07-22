@@ -166,16 +166,35 @@ export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProdu
 export async function syncAllProducts(admin: AdminApiContext, shopDomain: string) {
   const products = await productsFromShopify(admin);
 
+  const shop = await prisma.shop.upsert({
+    where: { shopDomain },
+    update: { shopDomain },
+    create: { shopDomain },
+  });
+
+  const syncedShopifyIds: string[] = [];
   let cnt = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{
       await upsertFunc(shopDomain, tempObject);
+      syncedShopifyIds.push(tempObject.shopifyId);
       cnt = cnt + 1;
     }catch(error){
       console.log("Failed to sync product");
     }
   }
+
+  const deleteResult = await prisma.product.deleteMany({
+    where: {
+      shopId: shop.id,
+      shopifyId: {
+        notIn: syncedShopifyIds, 
+      },
+    },
+  });
+
+  console.log(`Synced: ${cnt}, Deleted stale products: ${deleteResult.count}`);
 
   return cnt;
 }
