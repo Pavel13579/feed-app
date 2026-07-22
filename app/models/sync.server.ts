@@ -16,7 +16,7 @@ const GRAPHQL_QUERY = `#graphql
           status
           tags
           onlineStoreUrl
-          variants(first: 10) {
+          variants(first: 100) {
             edges {
               node {
                 id
@@ -27,14 +27,20 @@ const GRAPHQL_QUERY = `#graphql
                 inventoryQuantity
               }
             }
+            pageInfo {
+              hasNextPage
+            }
           }
-          images(first: 5) {
+          images(first: 50) {
             edges {
               node {
                 id
                 url
                 altText
               }
+            }
+            pageInfo {
+              hasNextPage
             }
           }
         }
@@ -67,11 +73,19 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
           pageInfo: { hasNextPage: boolean; endCursor: string | null };
         };
       };
+      errors?: Array<{ message: string }>;
     };
+
+    if (responseJson.errors && responseJson.errors.length > 0) {
+      const errorMessage = responseJson.errors.map((e) => e.message).join(", ");
+      throw new Error(`Shopify GraphQL Error: ${errorMessage}`);
+    }
+
+
     const productsData = responseJson.data?.products;
 
     if (!productsData) {
-      break;
+      throw new Error("Failed to fetch products from Shopify: invalid response structure");
     }
 
     const fetchedProducts = productsData.edges.map((edge) => edge.node);
@@ -86,42 +100,36 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
   return allProducts;
 }
 
-export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProduct) {
+export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) {
       return prisma.$transaction(async (pris) => {
-          const shop = await pris.shop.upsert({
-            where: { shopDomain },
-            update: { shopDomain },
-            create: { shopDomain },
-          });
-
-          const product = await pris.product.upsert({
-            where: {
-              shopId_shopifyId: {
-              shopId: shop.id,            
-              shopifyId: mappedProduct.shopifyId, 
-            },
-            },
-            update: {
-              title: mappedProduct.title,
-              descriptionHtml: mappedProduct.descriptionHtml,
-              vendor: mappedProduct.vendor,
-              productType: mappedProduct.productType,
-              status: mappedProduct.status,
-              tags: mappedProduct.tags,
-              onlineStoreUrl: mappedProduct.onlineStoreUrl,
-            },
-            create: {
-              shopifyId: mappedProduct.shopifyId,
-              title: mappedProduct.title,
-              descriptionHtml: mappedProduct.descriptionHtml,
-              vendor: mappedProduct.vendor,
-              productType: mappedProduct.productType,
-              status: mappedProduct.status,
-              tags: mappedProduct.tags,
-              onlineStoreUrl: mappedProduct.onlineStoreUrl,
-              shopId: shop.id,
-            },
-          });
+    const product = await pris.product.upsert({
+      where: {
+        shopId_shopifyId: {
+          shopId,
+          shopifyId: mappedProduct.shopifyId, 
+        },
+      },
+      update: {
+        title: mappedProduct.title,
+        descriptionHtml: mappedProduct.descriptionHtml,
+        vendor: mappedProduct.vendor,
+        productType: mappedProduct.productType,
+        status: mappedProduct.status,
+        tags: mappedProduct.tags,
+        onlineStoreUrl: mappedProduct.onlineStoreUrl,
+      },
+      create: {
+        shopifyId: mappedProduct.shopifyId,
+        title: mappedProduct.title,
+        descriptionHtml: mappedProduct.descriptionHtml,
+        vendor: mappedProduct.vendor,
+        productType: mappedProduct.productType,
+        status: mappedProduct.status,
+        tags: mappedProduct.tags,
+        onlineStoreUrl: mappedProduct.onlineStoreUrl,
+        shopId,
+      },
+    });
 
           await pris.variant.deleteMany({ where: { productId: product.id } });
           await pris.image.deleteMany({ where: { productId: product.id } });
@@ -152,16 +160,52 @@ export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProdu
 export async function syncAllProducts(admin: AdminApiContext, shopDomain: string) {
   const products = await productsFromShopify(admin);
 
-  let cnt = 0;
+  const shop = await prisma.shop.upsert({
+    where: { shopDomain },
+    update: { shopDomain },
+    create: { shopDomain },
+  });
+
+  const syncedShopifyIds: string[] = [];
+  let synced = 0;
+  let failed = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{
-      await upsertFunc(shopDomain, tempObject);
-      cnt = cnt + 1;
+      await upsertFunc(shop.id, tempObject);
+      syncedShopifyIds.push(tempObject.shopifyId);
+      synced = synced + 1;
     }catch(error){
-      console.log("Failed to sync product");
+      failed += 1;
+      console.error(`Failed to sync product [ID: ${tempObject.shopifyId}] "${tempObject.title}":`, error);
     }
   }
 
-  return cnt;
+  const deleteResult = await prisma.product.deleteMany({
+    where: {
+      shopId: shop.id,
+      shopifyId: {
+        notIn: syncedShopifyIds, 
+      },
+    },
+  });
+
+  const isSuccessfulSync = synced > 0 || products.length === 0;
+
+
+  if (isSuccessfulSync) {
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: { lastSyncedAt: new Date() },
+    });
+  }
+
+  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}`);
+
+  return {
+    synced,
+    failed,
+    deleted: deleteResult.count,
+    total: products.length,
+  };
 }

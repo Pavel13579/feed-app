@@ -54,18 +54,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const {admin, session} = await authenticate.admin(request);
 
   try{
-    const cnt = await syncAllProducts(admin, session.shop);
-
-    await prisma.shop.update({
-      where: {shopDomain: session.shop},
-      data: {lastSyncedAt: new Date()}
-    })
-
+    const stats = await syncAllProducts(admin, session.shop);
     console.log("Synced");
-    return json({ success: true, cnt });
+    return json({ success: true, stats });
   }catch(error){
     console.log("Sync failed:", error);
-    return json({ success: false, cnt: 0, error: "Sync failed" }, { status: 500 });
+    return json({ success: false, stats: null, error: "Sync failed" }, { status: 500 });
   }
 }
 
@@ -102,16 +96,19 @@ export default function ProductPage() {
         <Layout.Section>
           <BlockStack gap="500">
             
-            {actionData?.success && !isSyncing && (
-              <Banner tone="success" title="Sync Done">
-                <p>Synced: <strong>{actionData.cnt}</strong></p>
-              </Banner>
-            )}
-
-            {actionData?.success === false && !isSyncing && (
-              <Banner tone="critical" title="Synchronization failed">
-                <p>Error occurred due synchronization</p>
-              </Banner>
+            {actionData?.success && actionData.stats && !isSyncing && (
+                <Banner 
+                  tone={actionData.stats.failed > 0 ? "warning" : "success"} 
+                  title="Sync Done"
+                >
+                  <p>Synced: <strong>{actionData.stats.synced}</strong> of {actionData.stats.total}</p>
+                  {actionData.stats.failed > 0 && (
+                    <p>Failed: <Text as="span" tone="critical" fontWeight="bold">{actionData.stats.failed}</Text></p>
+                  )}
+                  {actionData.stats.deleted > 0 && (
+                    <p>Removed stale products: <strong>{actionData.stats.deleted}</strong></p>
+                  )}
+                </Banner>
             )}
 
             <Card padding="0">
