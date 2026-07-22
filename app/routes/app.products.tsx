@@ -55,12 +55,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try{
     const stats = await syncAllProducts(admin, session.shop);
-
-    await prisma.shop.update({
-      where: {shopDomain: session.shop},
-      data: {lastSyncedAt: new Date()}
-    })
-
     console.log("Synced");
     return json({ success: true, stats });
   }catch(error){

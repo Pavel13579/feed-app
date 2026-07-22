@@ -190,6 +190,16 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     },
   });
 
+  const isSuccessfulSync = synced > 0 || products.length === 0;
+
+
+  if (isSuccessfulSync) {
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: { lastSyncedAt: new Date() },
+    });
+  }
+
   console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}`);
 
   return {
