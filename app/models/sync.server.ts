@@ -67,11 +67,19 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
           pageInfo: { hasNextPage: boolean; endCursor: string | null };
         };
       };
+      errors?: Array<{ message: string }>;
     };
+
+    if (responseJson.errors && responseJson.errors.length > 0) {
+      const errorMessage = responseJson.errors.map((e) => e.message).join(", ");
+      throw new Error(`Shopify GraphQL Error: ${errorMessage}`);
+    }
+
+
     const productsData = responseJson.data?.products;
 
     if (!productsData) {
-      break;
+      throw new Error("Failed to fetch products from Shopify: invalid response structure");
     }
 
     const fetchedProducts = productsData.edges.map((edge) => edge.node);
