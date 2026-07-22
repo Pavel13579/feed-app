@@ -16,7 +16,7 @@ const GRAPHQL_QUERY = `#graphql
           status
           tags
           onlineStoreUrl
-          variants(first: 10) {
+          variants(first: 100) {
             edges {
               node {
                 id
@@ -27,14 +27,20 @@ const GRAPHQL_QUERY = `#graphql
                 inventoryQuantity
               }
             }
+            pageInfo {
+              hasNextPage
+            }
           }
-          images(first: 5) {
+          images(first: 50) {
             edges {
               node {
                 id
                 url
                 altText
               }
+            }
+            pageInfo {
+              hasNextPage
             }
           }
         }
