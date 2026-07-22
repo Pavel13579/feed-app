@@ -100,42 +100,36 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
   return allProducts;
 }
 
-export async function upsertFunc(shopDomain: string, mappedProduct: IMappedProduct) {
+export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) {
       return prisma.$transaction(async (pris) => {
-          const shop = await pris.shop.upsert({
-            where: { shopDomain },
-            update: { shopDomain },
-            create: { shopDomain },
-          });
-
-          const product = await pris.product.upsert({
-            where: {
-              shopId_shopifyId: {
-              shopId: shop.id,            
-              shopifyId: mappedProduct.shopifyId, 
-            },
-            },
-            update: {
-              title: mappedProduct.title,
-              descriptionHtml: mappedProduct.descriptionHtml,
-              vendor: mappedProduct.vendor,
-              productType: mappedProduct.productType,
-              status: mappedProduct.status,
-              tags: mappedProduct.tags,
-              onlineStoreUrl: mappedProduct.onlineStoreUrl,
-            },
-            create: {
-              shopifyId: mappedProduct.shopifyId,
-              title: mappedProduct.title,
-              descriptionHtml: mappedProduct.descriptionHtml,
-              vendor: mappedProduct.vendor,
-              productType: mappedProduct.productType,
-              status: mappedProduct.status,
-              tags: mappedProduct.tags,
-              onlineStoreUrl: mappedProduct.onlineStoreUrl,
-              shopId: shop.id,
-            },
-          });
+    const product = await pris.product.upsert({
+      where: {
+        shopId_shopifyId: {
+          shopId,
+          shopifyId: mappedProduct.shopifyId, 
+        },
+      },
+      update: {
+        title: mappedProduct.title,
+        descriptionHtml: mappedProduct.descriptionHtml,
+        vendor: mappedProduct.vendor,
+        productType: mappedProduct.productType,
+        status: mappedProduct.status,
+        tags: mappedProduct.tags,
+        onlineStoreUrl: mappedProduct.onlineStoreUrl,
+      },
+      create: {
+        shopifyId: mappedProduct.shopifyId,
+        title: mappedProduct.title,
+        descriptionHtml: mappedProduct.descriptionHtml,
+        vendor: mappedProduct.vendor,
+        productType: mappedProduct.productType,
+        status: mappedProduct.status,
+        tags: mappedProduct.tags,
+        onlineStoreUrl: mappedProduct.onlineStoreUrl,
+        shopId,
+      },
+    });
 
           await pris.variant.deleteMany({ where: { productId: product.id } });
           await pris.image.deleteMany({ where: { productId: product.id } });
@@ -173,15 +167,17 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
   });
 
   const syncedShopifyIds: string[] = [];
-  let cnt = 0;
+  let synced = 0;
+  let failed = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{
-      await upsertFunc(shopDomain, tempObject);
+      await upsertFunc(shop.id, tempObject);
       syncedShopifyIds.push(tempObject.shopifyId);
-      cnt = cnt + 1;
+      synced = synced + 1;
     }catch(error){
-      console.log("Failed to sync product");
+      failed += 1;
+      console.error(`Failed to sync product [ID: ${tempObject.shopifyId}] "${tempObject.title}":`, error);
     }
   }
 
@@ -194,7 +190,12 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     },
   });
 
-  console.log(`Synced: ${cnt}, Deleted stale products: ${deleteResult.count}`);
+  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}`);
 
-  return cnt;
+  return {
+    synced,
+    failed,
+    deleted: deleteResult.count,
+    total: products.length,
+  };
 }
