@@ -153,6 +153,6 @@ function isValidGtin(gtin: string | null | undefined): boolean {
 }
 
 function wrapInCData(html: string): string {
-  const cleanHtml = html.replace(/\]\]>/g, ']]&gt;');
+  const cleanHtml = html.replace(/]]>/g, ']]]]><![CDATA[>');
   return `<![CDATA[${cleanHtml}]]>`;
 }
