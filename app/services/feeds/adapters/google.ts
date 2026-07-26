@@ -1,5 +1,5 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, GoogleItem } from "../types";
+import { FeedAdapter, FeedRenderResult, GoogleItem } from "../types";
 
 export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
@@ -60,15 +60,11 @@ export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "googleFeed.xml",
   
-  render(products: NormalizedProduct[], shopDomain: string, context?: { skippedCount: number }): string {
+  render(products: NormalizedProduct[], shopDomain: string): FeedRenderResult {
     const { items, skippedCount } = mapProductsToGoogleItems(products);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
-    }
-
-    if (context) {
-      context.skippedCount = skippedCount;
     }
 
     const xmlItems = items.map((item) => {
@@ -86,19 +82,19 @@ export const googleAdapter: FeedAdapter = {
       ];
 
       if (item.brand) {
-        fields.push(`<g:brand>${escapeXml(item.brand)}</g:brand>`);
+        fields.push(`      <g:brand>${escapeXml(item.brand)}</g:brand>`);
       }
       if (item.gtin) {
-        fields.push(`<g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
+        fields.push(`      <g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
       }
       if (item.mpn) {
-        fields.push(`<g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+        fields.push(`      <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
       }
 
       return `<item>\n${fields.join('\n')}\n</item>`;
     }).join('\n');
 
-    return `<?xml version="1.0" encoding="utf-8"?>
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
             <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
             <channel>
               <title>${escapeXml(shopDomain)} Store Feed</title>
@@ -107,6 +103,12 @@ export const googleAdapter: FeedAdapter = {
           ${xmlItems}
             </channel>
           </rss>`;
+
+    return {
+      xml,
+      itemCount: items.length,
+      skippedCount,
+    };
   }
 };
 

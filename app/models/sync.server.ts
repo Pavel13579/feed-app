@@ -162,7 +162,7 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
 
   const shop = await prisma.shop.upsert({
     where: { shopDomain },
-    update: { shopDomain },
+    update: { },
     create: { shopDomain },
   });
 
