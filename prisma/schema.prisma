@@ -54,6 +54,7 @@ model Product {
   productType     String?
   status          String
   tags            String[] @default([])
+  handle          String?
   onlineStoreUrl  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

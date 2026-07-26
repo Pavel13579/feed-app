@@ -8,7 +8,11 @@ export type DbProductWithRelations = Product & {
 
 
 export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string = "HUF"): NormalizedProduct {
-  const productLink = product.onlineStoreUrl ? product.onlineStoreUrl : `https://${shopDomain}/products/${product.shopifyId}`;
+  const productLink = product.onlineStoreUrl
+    ? product.onlineStoreUrl
+    : product.handle
+      ? `https://${shopDomain}/products/${product.handle}`
+      : null;
 
   const sortedImages = [...product.images]
     .sort((a, b) => a.position - b.position)

@@ -16,7 +16,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
       const variantId = variant.shopifyId;
       const priceValue = variant.price; 
 
-      if (!variantId || !priceValue || !mainImageUrl) {
+      if (!variantId || !priceValue || !mainImageUrl || !product.link) {
         skippedCount++;
         continue;
       }

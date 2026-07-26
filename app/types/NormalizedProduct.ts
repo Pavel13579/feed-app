@@ -6,7 +6,7 @@ export interface NormalizedProduct {
   vendor: string | null;      
   productType: string | null; 
   status: string;
-  link: string;             
+  link: string | null;             
   images: { url: string; altText: string | null }[];
   variants: NormalizedVariant[];
 }

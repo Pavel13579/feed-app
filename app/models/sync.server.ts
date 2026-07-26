@@ -10,6 +10,7 @@ const GRAPHQL_QUERY = `#graphql
         node {
           id
           title
+          handle
           descriptionHtml
           vendor
           productType
@@ -111,6 +112,7 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
       },
       update: {
         title: mappedProduct.title,
+        handle: mappedProduct.handle,
         descriptionHtml: mappedProduct.descriptionHtml,
         vendor: mappedProduct.vendor,
         productType: mappedProduct.productType,
@@ -121,6 +123,7 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
       create: {
         shopifyId: mappedProduct.shopifyId,
         title: mappedProduct.title,
+        handle: mappedProduct.handle,
         descriptionHtml: mappedProduct.descriptionHtml,
         vendor: mappedProduct.vendor,
         productType: mappedProduct.productType,
