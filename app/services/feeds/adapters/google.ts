@@ -6,6 +6,10 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
   let skippedCount = 0;
 
   for (const product of products) {
+    if (product.status && product.status.toUpperCase() !== "ACTIVE") {
+      skippedCount += product.variants.length;
+      continue;
+    }
     const mainImageUrl = product.images?.[0]?.url;
 
     for (const variant of product.variants) {

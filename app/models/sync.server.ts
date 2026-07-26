@@ -132,9 +132,6 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
     });
 
           await pris.variant.deleteMany({ where: { productId: product.id } });
-          await pris.image.deleteMany({ where: { productId: product.id } });
-
-
 
           if (mappedProduct.variants?.length > 0) {
               await pris.variant.createMany({
@@ -145,13 +142,35 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
               });         
           }
 
-          if(mappedProduct.images?.length > 0){
-            await pris.image.createMany({
-                data: mappedProduct.images.map((image) => ({
+          if (mappedProduct.images?.length > 0) {
+            const incomingImageIds = mappedProduct.images.map((i) => i.shopifyId);
+
+            await pris.image.deleteMany({
+              where: {
+                productId: product.id,
+                shopifyId: { notIn: incomingImageIds },
+              },
+            });
+
+            for (const image of mappedProduct.images) {
+              await pris.image.upsert({
+                where: {
+                  productId_shopifyId: {
+                    productId: product.id,
+                    shopifyId: image.shopifyId,
+                  },
+                },
+                update: {
+                  url: image.url,
+                  altText: image.altText,
+                  position: image.position,
+                },
+                create: {
                   ...image,
                   productId: product.id,
-                })),
+                },
               });
+            }
           }
       })
 }

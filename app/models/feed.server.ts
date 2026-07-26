@@ -19,7 +19,9 @@ export async function generateFeed(feedId: string) {
 
   try {
     const dbProducts = await db.product.findMany({
-      where: { shopId: shopId },
+      where: { shopId: shopId,
+        status: "ACTIVE",
+       },
       include: {
         variants: true,
         images: { orderBy: { position: "asc" } },
