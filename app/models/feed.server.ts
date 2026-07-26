@@ -14,7 +14,13 @@ export async function generateFeed(feedId: string) {
 
   const { channel, shopId, shop } = feed;
   const shopDomain = shop.shopDomain;
-  const currencyCode = shop.currencyCode ?? "USD";
+
+  if (!shop.currencyCode) {
+    throw new Error(
+      `Shop ${shopDomain} has no currencyCode yet — run a product sync first (it fetches shop { currencyCode }).`
+    );
+  }
+  const currencyCode = shop.currencyCode;
 
   const adapter = getAdapter(channel);
 
@@ -31,7 +37,7 @@ export async function generateFeed(feedId: string) {
 
     if (dbProducts.length === 0) {
       
-      const { xml } = adapter.render([], shopDomain);
+      const { xml } = adapter.render([], shopDomain, currencyCode);
 
       const updatedFeed = await db.feed.update({
         where: { id: feedId },
@@ -49,10 +55,10 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(product, shopDomain, currencyCode)
+      dbProductToNormalized(product, shopDomain)
     );
 
-    const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain);
+    const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
 
     if (dbProducts.length > 0 && itemCount === 0) {
       throw new Error("Total items 0. Failed to generate feed");

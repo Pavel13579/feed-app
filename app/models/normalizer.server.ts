@@ -7,7 +7,7 @@ export type DbProductWithRelations = Product & {
 };
 
 
-export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string): NormalizedProduct {
+export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string): NormalizedProduct {
   const productLink = product.onlineStoreUrl
     ? product.onlineStoreUrl
     : product.handle
@@ -30,7 +30,6 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     compareAtPrice: v.compareAtPrice ? v.compareAtPrice.toString() : null,
     inventoryQuantity: v.inventoryQuantity,
     isAvailable: v.inventoryQuantity > 0,
-    currency: currency,
   }));
 
   return {
@@ -41,7 +40,7 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     vendor: product.vendor,
     productType: product.productType,
     status: product.status,
-    link: productLink,
+    link: productLink, 
     images: sortedImages,
     variants: normalizedVariants,
   };

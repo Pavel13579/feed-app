@@ -1,7 +1,24 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult, GoogleItem } from "../types";
+import { FeedAdapter, FeedRenderResult } from "../types";
 
-export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items: GoogleItem[]; skippedCount: number } {
+
+interface GoogleItem {
+  id: string;                    
+  item_group_id: string;          
+  title: string;                 
+  description: string;           
+  link: string;                  
+  image_link: string;            
+  availability: "in_stock" | "out_of_stock"; 
+  price: string;                 
+  condition: "new";              
+  brand: string | null;          
+  gtin: string | null;           
+  mpn: string | null;            
+  identifier_exists: "true" | "false";
+}
+
+export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
 
@@ -16,13 +33,12 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
       const variantId = variant.shopifyId;
       const priceValue = variant.price; 
 
-      if (!variantId || !priceValue || !mainImageUrl || !product.link) {
+      if (!variantId || !priceValue || !mainImageUrl || !product.link || !currencyCode) {
         skippedCount++;
         continue;
       }
 
-      const variantCurrency = variant.currency || "HUF"; 
-      const formattedPrice = `${priceValue} ${variantCurrency}`;
+      const formattedPrice = `${priceValue} ${currencyCode}`;
 
       const rawGtin = variant.barcode?.trim() || null;
 
@@ -64,8 +80,8 @@ export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "googleFeed.xml",
   
-  render(products: NormalizedProduct[], shopDomain: string): FeedRenderResult {
-    const { items, skippedCount } = mapProductsToGoogleItems(products);
+  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
+    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
