@@ -7,7 +7,7 @@ export type DbProductWithRelations = Product & {
 };
 
 
-export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string = "HUF"): NormalizedProduct {
+export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string): NormalizedProduct {
   const productLink = product.onlineStoreUrl
     ? product.onlineStoreUrl
     : product.handle

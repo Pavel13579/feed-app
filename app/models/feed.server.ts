@@ -14,6 +14,7 @@ export async function generateFeed(feedId: string) {
 
   const { channel, shopId, shop } = feed;
   const shopDomain = shop.shopDomain;
+  const currencyCode = shop.currencyCode ?? "USD";
 
   const adapter = getAdapter(channel);
 
@@ -48,7 +49,7 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(product, shopDomain)
+      dbProductToNormalized(product, shopDomain, currencyCode)
     );
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain);
