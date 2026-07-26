@@ -60,8 +60,8 @@ export async function generateFeed(feedId: string) {
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
 
-    if (dbProducts.length > 0 && itemCount === 0) {
-      throw new Error("Total items 0. Failed to generate feed");
+    if (itemCount === 0 && skippedCount > 0) {
+      console.warn(`Feed ${feedId}: 0 items, ${skippedCount} skipped — saving empty feed.`);
     }
 
     const updatedFeed = await db.feed.update({
