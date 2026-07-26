@@ -50,7 +50,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
       const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
 
       const itemLink = variant.shopifyId 
-        ? `${product.link}?variant=${variant.shopifyId.replace('gid://shopify/ProductVariant/', '')}`
+        ? `${product.link}?variant=${variant.shopifyId}`
         : product.link;
 
       const googleItem: GoogleItem = {
