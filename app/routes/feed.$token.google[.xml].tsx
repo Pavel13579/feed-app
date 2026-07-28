@@ -8,9 +8,17 @@ export async function loader({ params }: LoaderFunctionArgs) {
     return new Response("Token is required", { status: 400 });
   }
 
-  const feed = await db.feed.findUnique({
-    where: { token },
-  });
+  const feed = await db.feed.findUnique({ where: { token } });
 
-  return new Response(feed?.content || "");
+  if (!feed) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  if (!feed.content) {
+    return new Response("Feed not generated yet", { status: 404 });
+  }
+
+  return new Response(feed.content, {
+    headers: { "Content-Type": "application/xml; charset=utf-8" },
+  });
 }
