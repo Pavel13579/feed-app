@@ -38,7 +38,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         continue;
       }
 
-      const formattedPrice = `${priceValue} ${currencyCode}`;
+      const formattedPrice = `${Number(priceValue).toFixed(2)} ${currencyCode}`;
 
       const rawGtin = variant.barcode?.trim() || null;
 
