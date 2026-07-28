@@ -43,7 +43,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let feed = await db.feed.findFirst({
     where: {
       shopId: shop.id,
-      channel: "google",
+      channel: googleAdapter.channel,
     },
   });
 
@@ -51,7 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     feed = await db.feed.create({
       data: {
         shopId: shop.id,
-        channel: "google",
+        channel: googleAdapter.channel,
         name: "Google Shopping Feed",
         token: crypto.randomUUID(),
         content: "",
