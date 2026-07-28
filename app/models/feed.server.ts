@@ -15,11 +15,20 @@ export async function generateFeed(feedId: string) {
   const { channel, shopId, shop } = feed;
   const shopDomain = shop.shopDomain;
 
+  if (!shop.currencyCode) {
+    throw new Error(
+      `Shop ${shopDomain} has no currencyCode yet — run a product sync first (it fetches shop { currencyCode }).`
+    );
+  }
+  const currencyCode = shop.currencyCode;
+
   const adapter = getAdapter(channel);
 
   try {
     const dbProducts = await db.product.findMany({
-      where: { shopId: shopId },
+      where: { shopId: shopId,
+        status: "ACTIVE",
+       },
       include: {
         variants: true,
         images: { orderBy: { position: "asc" } },
@@ -27,12 +36,18 @@ export async function generateFeed(feedId: string) {
     });
 
     if (dbProducts.length === 0) {
-      const emptyXml = adapter.render([], shopDomain);
+      
+      const { xml } = adapter.render([], shopDomain, currencyCode);
+
       const updatedFeed = await db.feed.update({
         where: { id: feedId },
-        data: { content: emptyXml, itemCount: 0, lastGeneratedAt: new Date() },
+        data: {
+          content: xml, 
+          itemCount: 0,
+          lastGeneratedAt: new Date(),
+        },
       });
-      
+
       return {
         ...updatedFeed,
         skippedItems: 0,
@@ -43,29 +58,24 @@ export async function generateFeed(feedId: string) {
       dbProductToNormalized(product, shopDomain)
     );
 
-    const context = { skippedCount: 0 };
+    const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
 
-    const xmlContent = adapter.render(normalizedProducts, shopDomain, context);
-    const totalItems = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
-    
-    const skippedItems = context.skippedCount;
-
-    if (dbProducts.length > 0 && totalItems === 0) {
-      throw new Error("Total items 0. Failed to generate feed");
+    if (itemCount === 0 && skippedCount > 0) {
+      console.warn(`Feed ${feedId}: 0 items, ${skippedCount} skipped — saving empty feed.`);
     }
 
     const updatedFeed = await db.feed.update({
       where: { id: feedId },
       data: {
-        content: xmlContent,
-        itemCount: totalItems,
+        content: xml,
+        itemCount: itemCount, 
         lastGeneratedAt: new Date(),
       },
     });
 
     return {
       ...updatedFeed,
-      skippedItems: skippedItems,
+      skippedItems: skippedCount,
     };
 
   } catch (error) {

@@ -1,24 +1,44 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, GoogleItem } from "../types";
+import { FeedAdapter, FeedRenderResult } from "../types";
 
-export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items: GoogleItem[]; skippedCount: number } {
+
+interface GoogleItem {
+  id: string;                    
+  item_group_id: string;          
+  title: string;                 
+  description: string;           
+  link: string;                  
+  image_link: string;            
+  availability: "in_stock" | "out_of_stock"; 
+  price: string;                 
+  condition: "new";              
+  brand: string | null;          
+  gtin: string | null;           
+  mpn: string | null;            
+  identifier_exists: "true" | "false";
+}
+
+export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
 
   for (const product of products) {
+    if (product.status && product.status.toUpperCase() !== "ACTIVE") {
+      skippedCount += product.variants.length;
+      continue;
+    }
     const mainImageUrl = product.images?.[0]?.url;
 
     for (const variant of product.variants) {
       const variantId = variant.shopifyId;
       const priceValue = variant.price; 
 
-      if (!variantId || !priceValue || !mainImageUrl) {
+      if (!variantId || !priceValue || !mainImageUrl || !product.link || !currencyCode) {
         skippedCount++;
         continue;
       }
 
-      const variantCurrency = variant.currency || "HUF"; 
-      const formattedPrice = `${priceValue} ${variantCurrency}`;
+      const formattedPrice = `${priceValue} ${currencyCode}`;
 
       const rawGtin = variant.barcode?.trim() || null;
 
@@ -30,7 +50,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[]): { items
       const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
 
       const itemLink = variant.shopifyId 
-        ? `${product.link}?variant=${variant.shopifyId.replace('gid://shopify/ProductVariant/', '')}`
+        ? `${product.link}?variant=${variant.shopifyId}`
         : product.link;
 
       const googleItem: GoogleItem = {
@@ -60,15 +80,11 @@ export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "googleFeed.xml",
   
-  render(products: NormalizedProduct[], shopDomain: string, context?: { skippedCount: number }): string {
-    const { items, skippedCount } = mapProductsToGoogleItems(products);
+  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
+    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
-    }
-
-    if (context) {
-      context.skippedCount = skippedCount;
     }
 
     const xmlItems = items.map((item) => {
@@ -86,19 +102,19 @@ export const googleAdapter: FeedAdapter = {
       ];
 
       if (item.brand) {
-        fields.push(`<g:brand>${escapeXml(item.brand)}</g:brand>`);
+        fields.push(`      <g:brand>${escapeXml(item.brand)}</g:brand>`);
       }
       if (item.gtin) {
-        fields.push(`<g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
+        fields.push(`      <g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
       }
       if (item.mpn) {
-        fields.push(`<g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+        fields.push(`      <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
       }
 
       return `<item>\n${fields.join('\n')}\n</item>`;
     }).join('\n');
 
-    return `<?xml version="1.0" encoding="utf-8"?>
+    const xml = `<?xml version="1.0" encoding="utf-8"?>
             <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
             <channel>
               <title>${escapeXml(shopDomain)} Store Feed</title>
@@ -107,6 +123,12 @@ export const googleAdapter: FeedAdapter = {
           ${xmlItems}
             </channel>
           </rss>`;
+
+    return {
+      xml,
+      itemCount: items.length,
+      skippedCount,
+    };
   }
 };
 
@@ -131,6 +153,6 @@ function isValidGtin(gtin: string | null | undefined): boolean {
 }
 
 function wrapInCData(html: string): string {
-  const cleanHtml = html.replace(/\]\]>/g, ']]&gt;');
+  const cleanHtml = html.replace(/]]>/g, ']]]]><![CDATA[>');
   return `<![CDATA[${cleanHtml}]]>`;
 }

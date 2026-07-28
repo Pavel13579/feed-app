@@ -2,15 +2,20 @@ import { IGraphQlResponseType, IMappedProduct } from "app/types/types";
 
 export function mapShopifyProduct(node: IGraphQlResponseType): IMappedProduct {
     const parsedId = parseIdFromGid(node.id);
+
+    const tags = Array.isArray(node.tags)
+    ? node.tags.map((tag) => tag.trim()).filter(Boolean)
+    : [];
     
     const product = {
     shopifyId: parsedId,
     title: node.title,
+    handle: node.handle || null,
     descriptionHtml: node.descriptionHtml,
     vendor: node.vendor,
     productType: node.productType,
     status: node.status,
-    tags: node.tags ? node.tags.join(', ') : null,
+    tags,
     onlineStoreUrl: node.onlineStoreUrl || null,
   };
 

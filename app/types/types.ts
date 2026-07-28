@@ -1,6 +1,7 @@
 export interface IGraphQlResponseType {
   id: string;
   title: string;
+  handle?: string | null;
   descriptionHtml?: string;
   vendor?: string;
   productType?: string;
@@ -18,6 +19,10 @@ export interface IGraphQlResponseType {
         inventoryQuantity: number;
       };
     }>;
+    pageInfo?: {
+      hasNextPage: boolean;
+      endCursor?: string | null;
+    };
   };
   images?: {
     edges: Array<{
@@ -27,6 +32,10 @@ export interface IGraphQlResponseType {
         altText?: string | null;
       };
     }>;
+    pageInfo?: {
+      hasNextPage: boolean;
+      endCursor?: string | null;
+    };
   };
 }
 
@@ -35,11 +44,12 @@ export interface IGraphQlResponseType {
 export interface IMappedProduct {
   shopifyId: string;
   title: string;
+  handle: string | null;
   descriptionHtml?: string | null;
   vendor?: string | null;
   productType?: string | null;
   status: string;
-  tags: string | null;
+  tags: string[];
   onlineStoreUrl?: string | null;
   variants: Array<{
     shopifyId: string;
