@@ -10,6 +10,7 @@ export function mapShopifyProduct(node: IGraphQlResponseType): IMappedProduct {
     const product = {
     shopifyId: parsedId,
     title: node.title,
+    handle: node.handle || null,
     descriptionHtml: node.descriptionHtml,
     vendor: node.vendor,
     productType: node.productType,

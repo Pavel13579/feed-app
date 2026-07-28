@@ -7,8 +7,12 @@ export type DbProductWithRelations = Product & {
 };
 
 
-export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, currency: string = "HUF"): NormalizedProduct {
-  const productLink = product.onlineStoreUrl ? product.onlineStoreUrl : `https://${shopDomain}/products/${product.shopifyId}`;
+export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string): NormalizedProduct {
+  const productLink = product.onlineStoreUrl
+    ? product.onlineStoreUrl
+    : product.handle
+      ? `https://${shopDomain}/products/${product.handle}`
+      : null;
 
   const sortedImages = [...product.images]
     .sort((a, b) => a.position - b.position)
@@ -26,7 +30,6 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     compareAtPrice: v.compareAtPrice ? v.compareAtPrice.toString() : null,
     inventoryQuantity: v.inventoryQuantity,
     isAvailable: v.inventoryQuantity > 0,
-    currency: currency,
   }));
 
   return {
@@ -37,7 +40,7 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     vendor: product.vendor,
     productType: product.productType,
     status: product.status,
-    link: productLink,
+    link: productLink, 
     images: sortedImages,
     variants: normalizedVariants,
   };

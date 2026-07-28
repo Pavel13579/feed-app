@@ -3,6 +3,14 @@ import prisma from "../db.server";
 import { AdminApiContext } from "@shopify/shopify-app-remix/server";
 import { IGraphQlResponseType, IMappedProduct } from "app/types/types";
 
+const SHOP_QUERY = `#graphql
+  query FetchShopCurrency {
+    shop {
+      currencyCode
+    }
+  }
+`;
+
 const GRAPHQL_QUERY = `#graphql
   query FetchProductsPagination($cursor: String) {
     products(first: 250, after: $cursor) {
@@ -10,6 +18,7 @@ const GRAPHQL_QUERY = `#graphql
         node {
           id
           title
+          handle
           descriptionHtml
           vendor
           productType
@@ -53,6 +62,22 @@ const GRAPHQL_QUERY = `#graphql
   }
 `;
 
+export async function currencyFromShopify(admin: AdminApiContext): Promise<string | null> {
+  const response = await admin.graphql(SHOP_QUERY);
+ 
+  const responseJson = (await response.json()) as {
+    data?: { shop?: { currencyCode?: string | null } };
+    errors?: Array<{ message: string }>;
+  };
+ 
+  if (responseJson.errors && responseJson.errors.length > 0) {
+    const errorMessage = responseJson.errors.map((e) => e.message).join(", ");
+    throw new Error(`Shopify GraphQL Error: ${errorMessage}`);
+  }
+ 
+  return responseJson.data?.shop?.currencyCode ?? null;
+}
+ 
 export async function productsFromShopify(admin: AdminApiContext) : Promise<IGraphQlResponseType[]> {
   let allProducts: IGraphQlResponseType[] = [];
   let hasNextPage = true;
@@ -111,6 +136,7 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
       },
       update: {
         title: mappedProduct.title,
+        handle: mappedProduct.handle,
         descriptionHtml: mappedProduct.descriptionHtml,
         vendor: mappedProduct.vendor,
         productType: mappedProduct.productType,
@@ -121,6 +147,7 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
       create: {
         shopifyId: mappedProduct.shopifyId,
         title: mappedProduct.title,
+        handle: mappedProduct.handle,
         descriptionHtml: mappedProduct.descriptionHtml,
         vendor: mappedProduct.vendor,
         productType: mappedProduct.productType,
@@ -132,9 +159,6 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
     });
 
           await pris.variant.deleteMany({ where: { productId: product.id } });
-          await pris.image.deleteMany({ where: { productId: product.id } });
-
-
 
           if (mappedProduct.variants?.length > 0) {
               await pris.variant.createMany({
@@ -145,13 +169,35 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
               });         
           }
 
-          if(mappedProduct.images?.length > 0){
-            await pris.image.createMany({
-                data: mappedProduct.images.map((image) => ({
+          if (mappedProduct.images?.length > 0) {
+            const incomingImageIds = mappedProduct.images.map((i) => i.shopifyId);
+
+            await pris.image.deleteMany({
+              where: {
+                productId: product.id,
+                shopifyId: { notIn: incomingImageIds },
+              },
+            });
+
+            for (const image of mappedProduct.images) {
+              await pris.image.upsert({
+                where: {
+                  productId_shopifyId: {
+                    productId: product.id,
+                    shopifyId: image.shopifyId,
+                  },
+                },
+                update: {
+                  url: image.url,
+                  altText: image.altText,
+                  position: image.position,
+                },
+                create: {
                   ...image,
                   productId: product.id,
-                })),
+                },
               });
+            }
           }
       })
 }
@@ -160,10 +206,17 @@ export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) 
 export async function syncAllProducts(admin: AdminApiContext, shopDomain: string) {
   const products = await productsFromShopify(admin);
 
+  let currencyCode: string | null = null;
+  try {
+    currencyCode = await currencyFromShopify(admin);
+  } catch (error) {
+    console.error(`Failed to fetch shop currency for ${shopDomain}:`, error);
+  }
+
   const shop = await prisma.shop.upsert({
     where: { shopDomain },
-    update: { shopDomain },
-    create: { shopDomain },
+    update: { ...(currencyCode ? { currencyCode } : {}) },
+    create: { shopDomain, currencyCode },
   });
 
   const syncedShopifyIds: string[] = [];

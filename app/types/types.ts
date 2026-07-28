@@ -1,6 +1,7 @@
 export interface IGraphQlResponseType {
   id: string;
   title: string;
+  handle?: string | null;
   descriptionHtml?: string;
   vendor?: string;
   productType?: string;
@@ -43,6 +44,7 @@ export interface IGraphQlResponseType {
 export interface IMappedProduct {
   shopifyId: string;
   title: string;
+  handle: string | null;
   descriptionHtml?: string | null;
   vendor?: string | null;
   productType?: string | null;
