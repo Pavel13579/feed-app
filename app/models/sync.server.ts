@@ -125,7 +125,7 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
   return allProducts;
 }
 
-export async function upsertFunc(shopId: string, mappedProduct: IMappedProduct) {
+export async function upsertProducts(shopId: string, mappedProduct: IMappedProduct) {
       return prisma.$transaction(async (pris) => {
     const product = await pris.product.upsert({
       where: {
@@ -225,7 +225,7 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{
-      await upsertFunc(shop.id, tempObject);
+      await upsertProducts(shop.id, tempObject);
       syncedShopifyIds.push(tempObject.shopifyId);
       synced = synced + 1;
     }catch(error){

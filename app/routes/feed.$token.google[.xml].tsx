@@ -19,6 +19,9 @@ export async function loader({ params }: LoaderFunctionArgs) {
   }
 
   return new Response(feed.content, {
-    headers: { "Content-Type": "application/xml; charset=utf-8" },
-  });
+  headers: {
+    "Content-Type": "application/xml; charset=utf-8",
+    "Cache-Control": "public, max-age=3600",
+  },
+});
 }
