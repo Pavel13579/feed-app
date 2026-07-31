@@ -15,7 +15,7 @@ database.sqlite
 
 erd.png
 /app/testxml
-
+feed.xml
 
 /extensions/*/dist
 
