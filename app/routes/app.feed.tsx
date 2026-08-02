@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { useSubmit, useNavigation, useActionData } from "@remix-run/react";
+import { useSubmit, useNavigation, useActionData, useLoaderData } from "@remix-run/react";
+import { useState, useCallback } from "react";
 import {
   Page,
   Layout,
@@ -10,21 +11,39 @@ import {
   Banner,
   List,
   Badge,
+  TextField,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
-import { productsFromShopify } from "app/models/sync.server";
 import db from "../db.server";
-import { json} from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { googleAdapter } from "app/services/feeds/adapters/google";
-import { Decimal } from "@prisma/client/runtime/library";
-import { dbProductToNormalized } from "app/models/normalizer.server";
 import { generateFeed } from "app/models/feed.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  return null;
-};
+  const { session } = await authenticate.admin(request);
+  const shopDomain = session.shop;
 
+  const shop = await db.shop.findUnique({
+    where: { shopDomain: shopDomain },
+  });
+
+  let feedToken = null;
+  if (shop) {
+    const feed = await db.feed.findFirst({
+      where: {
+        shopId: shop.id,
+        channel: googleAdapter.channel,
+      },
+    });
+    if (feed) {
+      feedToken = feed.token;
+    }
+  }
+
+  const appUrl = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
+
+  return json({ appUrl, feedToken });
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -43,7 +62,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let feed = await db.feed.findFirst({
     where: {
       shopId: shop.id,
-      channel: "google",
+      channel: googleAdapter.channel,
     },
   });
 
@@ -51,7 +70,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     feed = await db.feed.create({
       data: {
         shopId: shop.id,
-        channel: "google",
+        channel: googleAdapter.channel,
         name: "Google Shopping Feed",
         token: crypto.randomUUID(),
         content: "",
@@ -89,12 +108,28 @@ export default function FeedPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
+  const { appUrl, feedToken } = useLoaderData<typeof loader>();
 
+  const [isCopied, setIsCopied] = useState(false);
   const isLoading = navigation.state === "submitting";
+
+  const feedUrl = feedToken ? `${appUrl}/feed/${feedToken}/${googleAdapter.filename}` : "";
 
   const handleSync = () => {
     submit(null, { method: "POST" });
   };
+
+  const handleCopyUrl = useCallback(() => {
+    if (!feedUrl) return;
+    navigator.clipboard.writeText(feedUrl);
+    setIsCopied(true);
+    
+    if (typeof shopify !== 'undefined' && shopify.toast) {
+      shopify.toast.show('Link copied');
+    }
+
+    setTimeout(() => setIsCopied(false), 2000);
+  }, [feedUrl]);
 
   return (
     <Page 
@@ -137,33 +172,60 @@ export default function FeedPage() {
             </div>
           )}
 
-          <Card>
-            <BlockStack gap="400">
-              <BlockStack gap="200">
-                <Text as="h2" variant="headingMd">
-                  Google Shopping Feed
-                </Text>
-                <Text as="p" variant="bodyMd">
-                  Click the button below to force rebuild your product feed. This will compile all active variants and map them into standard Google Merchant Center format.
-                </Text>
-              </BlockStack>
+          <BlockStack gap="400">
+            {feedUrl && (
+              <Card>
+                <BlockStack gap="300">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Your Google Merchant Feed URL
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Copy this link and submit it to Google Merchant Center.
+                    </Text>
+                  </BlockStack>
+                  <TextField
+                    label="Feed URL"
+                    labelHidden
+                    value={feedUrl}
+                    readOnly
+                    autoComplete="off"
+                    connectedRight={
+                      <Button onClick={handleCopyUrl} variant={isCopied ? "primary" : "secondary"}>
+                        {isCopied ? "Copied!" : "Copy URL"}
+                      </Button>
+                    }
+                  />
+                </BlockStack>
+              </Card>
+            )}
 
-              <BlockStack gap="200">
-                <Button 
-                  variant="primary" 
-                  size="large" 
-                  onClick={handleSync}
-                  loading={isLoading}
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Generating XML..." : "Generate feed"}
-                </Button>
-              </BlockStack>
-            </BlockStack>
-          </Card>
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    Force Rebuild Feed
+                  </Text>
+                  <Text as="p" variant="bodyMd">
+                    Click the button below to force rebuild your product feed. This will compile all active variants and map them into standard Google Merchant Center format.
+                  </Text>
+                </BlockStack>
 
-          {actionData?.success && actionData.feed?.preview && (
-            <div style={{ marginTop: "16px" }}>
+                <BlockStack gap="200">
+                  <Button 
+                    variant="primary" 
+                    size="large" 
+                    onClick={handleSync}
+                    loading={isLoading}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "Generating XML..." : "Generate feed"}
+                  </Button>
+                </BlockStack>
+              </BlockStack>
+            </Card>
+
+            {actionData?.success && actionData.feed?.preview && (
               <Card>
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm">XML Preview (First 500 chars):</Text>
@@ -179,11 +241,10 @@ export default function FeedPage() {
                   </pre>
                 </BlockStack>
               </Card>
-            </div>
-          )}
+            )}
+          </BlockStack>
         </Layout.Section>
       </Layout>
     </Page>
   );
 }
-

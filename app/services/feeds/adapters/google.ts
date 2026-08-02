@@ -38,7 +38,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         continue;
       }
 
-      const formattedPrice = `${priceValue} ${currencyCode}`;
+      const formattedPrice = `${Number(priceValue).toFixed(2)} ${currencyCode}`;
 
       const rawGtin = variant.barcode?.trim() || null;
 
@@ -78,7 +78,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
 
 export const googleAdapter: FeedAdapter = {
   channel: "google",
-  filename: "googleFeed.xml",
+  filename: "google.xml",
   
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
     const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
