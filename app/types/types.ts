@@ -65,4 +65,5 @@ export interface IMappedProduct {
     altText?: string | null;
     position: number;
   }>;
+  imagesTruncated: boolean;
 }

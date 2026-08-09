@@ -119,17 +119,25 @@ export default function FeedPage() {
     submit(null, { method: "POST" });
   };
 
-  const handleCopyUrl = useCallback(() => {
-    if (!feedUrl) return;
-    navigator.clipboard.writeText(feedUrl);
-    setIsCopied(true);
-    
-    if (typeof shopify !== 'undefined' && shopify.toast) {
-      shopify.toast.show('Link copied');
-    }
+   const handleCopyUrl = useCallback(async () => {
+     if (!feedUrl) return;
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+     setIsCopied(true);
 
-    setTimeout(() => setIsCopied(false), 2000);
-  }, [feedUrl]);
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show('Link copied');
+      }
+
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy feed URL:', error);
+
+      if (typeof shopify !== 'undefined' && shopify.toast) {
+        shopify.toast.show('Could not copy link — please copy it manually', { isError: true });
+      }
+    }
+   }, [feedUrl]);
 
   return (
     <Page 

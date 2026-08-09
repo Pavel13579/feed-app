@@ -119,7 +119,6 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
     hasNextPage = productsData.pageInfo.hasNextPage;
     cursor = productsData.pageInfo.endCursor;
 
-    console.log(`Loaded products: ${fetchedProducts.length}. Total: ${allProducts.length}`);
   }
 
   return allProducts;
@@ -219,14 +218,17 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     create: { shopDomain, currencyCode },
   });
 
-  const syncedShopifyIds: string[] = [];
+
+  const shopifyIdsFromApi = products.map((prod) => mapShopifyProduct(prod).shopifyId);
+
   let synced = 0;
   let failed = 0;
+  let imagesTruncatedCount = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
+    if (tempObject.imagesTruncated) imagesTruncatedCount += 1;
     try{
       await upsertProducts(shop.id, tempObject);
-      syncedShopifyIds.push(tempObject.shopifyId);
       synced = synced + 1;
     }catch(error){
       failed += 1;
@@ -234,16 +236,23 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     }
   }
 
-  const deleteResult = await prisma.product.deleteMany({
-    where: {
-      shopId: shop.id,
-      shopifyId: {
-        notIn: syncedShopifyIds, 
+  let deleteResult = { count: 0 };
+  if (failed === 0) {
+    deleteResult = await prisma.product.deleteMany({
+      where: {
+        shopId: shop.id,
+        shopifyId: {
+          notIn: shopifyIdsFromApi,
+        },
       },
-    },
-  });
+    });
+  } else {
+    console.warn(
+      `Skipping stale-product cleanup for ${shopDomain}: ${failed} product(s) failed to sync this run`,
+    );
+  }
 
-  const isSuccessfulSync = synced > 0 || products.length === 0;
+  const isSuccessfulSync = failed === 0 && (synced > 0 || products.length === 0);
 
 
   if (isSuccessfulSync) {
@@ -253,12 +262,15 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     });
   }
 
-  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}`);
+  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}` +
+    (imagesTruncatedCount > 0 ? `, images truncated for ${imagesTruncatedCount} product(s)` : ""),
+  );
 
   return {
     synced,
     failed,
     deleted: deleteResult.count,
     total: products.length,
+    imagesTruncatedCount,
   };
 }
