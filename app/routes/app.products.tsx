@@ -97,19 +97,25 @@ export default function ProductPage() {
           <BlockStack gap="500">
             
             {actionData?.success && actionData.stats && !isSyncing && (
-                <Banner 
-                  tone={actionData.stats.failed > 0 ? "warning" : "success"} 
-                  title="Sync Done"
-                >
-                  <p>Synced: <strong>{actionData.stats.synced}</strong> of {actionData.stats.total}</p>
-                  {actionData.stats.failed > 0 && (
-                    <p>Failed: <Text as="span" tone="critical" fontWeight="bold">{actionData.stats.failed}</Text></p>
-                  )}
-                  {actionData.stats.deleted > 0 && (
-                    <p>Removed stale products: <strong>{actionData.stats.deleted}</strong></p>
-                  )}
-                </Banner>
-            )}
+              <Banner 
+                tone={actionData.stats.failed > 0 ? "warning" : "success"} 
+                title="Sync Done"
+              >
+                <p>Synced: <strong>{actionData.stats.synced}</strong> of {actionData.stats.total}</p>
+                {actionData.stats.failed > 0 && (
+                  <p>Failed: <Text as="span" tone="critical" fontWeight="bold">{actionData.stats.failed}</Text></p>
+                )}
+                {actionData.stats.deleted > 0 && (
+                  <p>Removed stale products: <strong>{actionData.stats.deleted}</strong></p>
+                )}
+                {actionData.stats.imagesTruncatedCount > 0 && (
+                  <p>
+                    Images truncated for <strong>{actionData.stats.imagesTruncatedCount}</strong> product
+                    {actionData.stats.imagesTruncatedCount > 1 ? "s" : ""} (more than 50 images)
+                  </p>
+                )}
+              </Banner>
+          )}
 
             <Card padding="0">
               <IndexTable

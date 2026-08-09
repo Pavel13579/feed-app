@@ -44,11 +44,13 @@ export function mapShopifyProduct(node: IGraphQlResponseType): IMappedProduct {
         position: index + 1,
     };
   });
+  const imagesTruncated = node.images?.pageInfo?.hasNextPage ?? false;
 
   return {
     ...product,
     variants,
     images,
+    imagesTruncated,
   };
     
 }

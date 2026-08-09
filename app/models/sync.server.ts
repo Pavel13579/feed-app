@@ -219,11 +219,15 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     create: { shopDomain, currencyCode },
   });
 
+
   const shopifyIdsFromApi = products.map((prod) => mapShopifyProduct(prod).shopifyId);
+
   let synced = 0;
   let failed = 0;
+  let imagesTruncatedCount = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
+    if (tempObject.imagesTruncated) imagesTruncatedCount += 1;
     try{
       await upsertProducts(shop.id, tempObject);
       synced = synced + 1;
@@ -244,7 +248,9 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
       },
     });
   } else {
-    console.warn(`Skipping stale-product cleanup for ${shopDomain}: ${failed} product(s) failed to sync this run`);
+    console.warn(
+      `Skipping stale-product cleanup for ${shopDomain}: ${failed} product(s) failed to sync this run`,
+    );
   }
 
   const isSuccessfulSync = failed === 0 && (synced > 0 || products.length === 0);
@@ -257,12 +263,15 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     });
   }
 
-  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}`);
+  console.log(`Synced: ${synced}, Deleted stale products: ${deleteResult.count}` +
+    (imagesTruncatedCount > 0 ? `, images truncated for ${imagesTruncatedCount} product(s)` : ""),
+  );
 
   return {
     synced,
     failed,
     deleted: deleteResult.count,
     total: products.length,
+    imagesTruncatedCount,
   };
 }
