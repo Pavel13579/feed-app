@@ -119,7 +119,6 @@ export async function productsFromShopify(admin: AdminApiContext) : Promise<IGra
     hasNextPage = productsData.pageInfo.hasNextPage;
     cursor = productsData.pageInfo.endCursor;
 
-    console.log(`Loaded products: ${fetchedProducts.length}. Total: ${allProducts.length}`);
   }
 
   return allProducts;

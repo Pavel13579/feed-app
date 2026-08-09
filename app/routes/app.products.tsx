@@ -55,10 +55,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try{
     const stats = await syncAllProducts(admin, session.shop);
-    console.log("Synced");
     return json({ success: true, stats });
   }catch(error){
-    console.log("Sync failed:", error);
+    console.error("Sync failed:", error);
     return json({ success: false, stats: null, error: "Sync failed" }, { status: 500 });
   }
 }

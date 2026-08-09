@@ -1,5 +1,6 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult } from "../types";
+import { Prisma } from "@prisma/client";
 
 
 interface GoogleItem {
@@ -38,7 +39,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         continue;
       }
 
-      const formattedPrice = `${Number(priceValue).toFixed(2)} ${currencyCode}`;
+      const formattedPrice = `${new Prisma.Decimal(priceValue).toFixed(2)} ${currencyCode}`;
 
       const rawGtin = variant.barcode?.trim() || null;
 
@@ -49,9 +50,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
       const hasUniqueIdentifier = !!(gtin || mpn);
       const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
 
-      const itemLink = variant.shopifyId 
-        ? `${product.link}?variant=${variant.shopifyId}`
-        : product.link;
+      const itemLink = `${product.link}?variant=${variantId}`;
 
       const googleItem: GoogleItem = {
         id: variant.shopifyId,    
