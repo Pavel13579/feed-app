@@ -219,14 +219,13 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     create: { shopDomain, currencyCode },
   });
 
-  const syncedShopifyIds: string[] = [];
+  const shopifyIdsFromApi = products.map((prod) => mapShopifyProduct(prod).shopifyId);
   let synced = 0;
   let failed = 0;
   for(const prod of products){
     const tempObject = mapShopifyProduct(prod);
     try{
       await upsertProducts(shop.id, tempObject);
-      syncedShopifyIds.push(tempObject.shopifyId);
       synced = synced + 1;
     }catch(error){
       failed += 1;
@@ -234,16 +233,21 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     }
   }
 
-  const deleteResult = await prisma.product.deleteMany({
-    where: {
-      shopId: shop.id,
-      shopifyId: {
-        notIn: syncedShopifyIds, 
+  let deleteResult = { count: 0 };
+  if (failed === 0) {
+    deleteResult = await prisma.product.deleteMany({
+      where: {
+        shopId: shop.id,
+        shopifyId: {
+          notIn: shopifyIdsFromApi,
+        },
       },
-    },
-  });
+    });
+  } else {
+    console.warn(`Skipping stale-product cleanup for ${shopDomain}: ${failed} product(s) failed to sync this run`);
+  }
 
-  const isSuccessfulSync = synced > 0 || products.length === 0;
+  const isSuccessfulSync = failed === 0 && (synced > 0 || products.length === 0);
 
 
   if (isSuccessfulSync) {
