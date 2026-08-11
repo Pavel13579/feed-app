@@ -108,6 +108,7 @@ model Feed {
   name            String   
   token           String    @unique
   content         String?   @db.Text
+  settings        Json?
   lastGeneratedAt DateTime?
   itemCount       Int       @default(0) 
   createdAt       DateTime  @default(now())
