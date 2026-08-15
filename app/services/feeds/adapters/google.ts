@@ -1,6 +1,7 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult } from "../types";
 import { Prisma } from "@prisma/client";
+import { googleCategories } from "./google-categories";
 
 
 interface GoogleItem {
@@ -78,6 +79,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
+  categories: googleCategories,
   
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
     const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
