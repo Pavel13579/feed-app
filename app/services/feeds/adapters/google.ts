@@ -1,6 +1,6 @@
+import { Prisma } from "@prisma/client";
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult } from "../types";
-import { Prisma } from "@prisma/client";
 import { googleCategories } from "./google-categories";
 
 
@@ -18,6 +18,8 @@ interface GoogleItem {
   gtin: string | null;           
   mpn: string | null;            
   identifier_exists: "true" | "false";
+  google_product_category: string | null;
+  product_type: string | null;
 }
 
 export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
@@ -67,6 +69,8 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         gtin: gtin,
         mpn: mpn,
         identifier_exists: identifierExists,
+        google_product_category: product.category,
+        product_type: product.productType,
       };
 
       items.push(googleItem);
@@ -110,6 +114,12 @@ export const googleAdapter: FeedAdapter = {
       }
       if (item.mpn) {
         fields.push(`      <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+      }
+      if (item.google_product_category) {
+        fields.push(`      <g:google_product_category>${escapeXml(item.google_product_category)}</g:google_product_category>`);
+      }
+      if (item.product_type) {
+        fields.push(`      <g:product_type>${escapeXml(item.product_type)}</g:product_type>`);
       }
 
       return `<item>\n${fields.join('\n')}\n</item>`;

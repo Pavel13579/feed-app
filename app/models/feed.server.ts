@@ -1,6 +1,7 @@
 import { dbProductToNormalized } from "./normalizer.server";
 import db from "../db.server";
 import { getAdapter } from "app/services/feeds/registry";
+import { getFeedSettings } from "app/services/feeds/settings";
 
 export async function generateFeed(feedId: string) {
   const feed = await db.feed.findUnique({
@@ -23,6 +24,8 @@ export async function generateFeed(feedId: string) {
   const currencyCode = shop.currencyCode;
 
   const adapter = getAdapter(channel);
+  
+  const { categoryMapping } = getFeedSettings(feed.settings);
 
   try {
     const dbProducts = await db.product.findMany({
@@ -55,7 +58,7 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(product, shopDomain)
+      dbProductToNormalized(product, shopDomain, categoryMapping)
     );
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);

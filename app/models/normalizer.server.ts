@@ -1,5 +1,7 @@
 import type { Product, Variant, Image } from "@prisma/client";
 import type { NormalizedProduct, NormalizedVariant } from "../types/NormalizedProduct";
+import type { CategoryMappingRow } from "app/services/feeds/settings";
+import { resolveCategory } from "./categoryResolver.server";
 
 export type DbProductWithRelations = Product & {
   variants: Variant[];
@@ -7,7 +9,7 @@ export type DbProductWithRelations = Product & {
 };
 
 
-export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string): NormalizedProduct {
+export function dbProductToNormalized(product: DbProductWithRelations, shopDomain: string, mappingRows: CategoryMappingRow[]): NormalizedProduct {
   const productLink = product.onlineStoreUrl
     ? product.onlineStoreUrl
     : product.handle
@@ -41,6 +43,7 @@ export function dbProductToNormalized(product: DbProductWithRelations, shopDomai
     productType: product.productType,
     status: product.status,
     link: productLink, 
+    category: resolveCategory({ productType: product.productType }, mappingRows),
     images: sortedImages,
     variants: normalizedVariants,
   };
