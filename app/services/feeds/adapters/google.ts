@@ -1,18 +1,7 @@
 import { Prisma } from "@prisma/client";
-import type { NormalizedProduct } from "app/types/NormalizedProduct";
-import type { CategoryMappingRow } from "app/services/feeds/settings";
+import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult } from "../types";
 import { googleCategories } from "./google-categories";
-
-export function resolveCategory(product: Pick<NormalizedProduct, "productType">, mappingRows: CategoryMappingRow[]): string | null {
-  if (!product.productType) return null;
-
-  const row = mappingRows.find((r) => r.productType === product.productType);
-  if (!row) return null;
-
-  const value = row.custom ? row.customValue : row.category;
-  return value && value.trim() ? value : null;
-}
 
 interface GoogleItem {
   id: string;                    
@@ -32,11 +21,7 @@ interface GoogleItem {
   product_type: string | null;
 }
 
-export function mapProductsToGoogleItems(
-  products: NormalizedProduct[], 
-  currencyCode: string,
-  mappingRows: CategoryMappingRow[] = []
-): { items: GoogleItem[]; skippedCount: number } {
+export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
 
@@ -46,7 +31,6 @@ export function mapProductsToGoogleItems(
       continue;
     }
     const mainImageUrl = product.images?.[0]?.url;
-    const mappedCategory = resolveCategory(product, mappingRows);
 
     for (const variant of product.variants) {
       const variantId = variant.shopifyId;
@@ -84,7 +68,7 @@ export function mapProductsToGoogleItems(
         gtin: gtin,
         mpn: mpn,
         identifier_exists: identifierExists,
-        google_product_category: mappedCategory,
+        google_product_category: product.category,
         product_type: product.productType,
       };
 
@@ -100,9 +84,8 @@ export const googleAdapter: FeedAdapter = {
   filename: "google.xml",
   categories: googleCategories,
   
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string, settings?: any): FeedRenderResult {
-    const mappingRows: CategoryMappingRow[] = settings?.categoryMapping ?? [];
-    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode, mappingRows);
+  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
+    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
