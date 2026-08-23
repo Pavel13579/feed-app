@@ -24,7 +24,6 @@ import { googleAdapter } from "app/services/feeds/adapters/google";
 import { getChannelCategories } from "app/services/feeds/registry";
 import { getFeedSettings, type CategoryMappingRow, type FeedSettings } from "app/services/feeds/settings";
 
-
 const CHANNEL = googleAdapter.channel;
 
 interface CategoryRow extends CategoryMappingRow {
@@ -44,7 +43,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const feedSettings = getFeedSettings(feed?.settings ?? null);
   const channelCategories = getChannelCategories(CHANNEL);
 
-  
+  const totalProductCount = shop ? await db.product.count({ where: { shopId: shop.id } }) : 0;
+
   const productTypeCounts = shop
     ? await db.product.groupBy({
         by: ["productType"],
@@ -58,11 +58,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const dbTypes = new Set<string>();
 
   const rows: CategoryRow[] = [];
+  let typedProductCount = 0;
 
   for (const entry of productTypeCounts) {
     if (!entry.productType) continue;
 
     dbTypes.add(entry.productType);
+    typedProductCount += entry._count.id;
     const saved = savedByType.get(entry.productType);
 
     rows.push({
@@ -74,14 +76,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-
   for (const saved of feedSettings.categoryMapping) {
     if (!dbTypes.has(saved.productType)) {
       rows.push({ ...saved, productCount: 0 });
     }
   }
 
-  return json({ rows, channelCategories });
+  const productsWithoutType = totalProductCount - typedProductCount;
+
+  return json({ rows, channelCategories, totalProductCount, productsWithoutType });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -129,10 +132,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .map((row) => {
       const custom = row.custom === true;
       const customValueRaw = typeof row.customValue === "string" ? row.customValue.trim() : "";
+      const categoryRaw = row.category != null ? String(row.category).trim() : "";
 
       return {
         productType: row.productType as string,
-        category: custom ? null : (typeof row.category === "string" && row.category ? row.category : null),
+        category: custom ? null : (categoryRaw.length > 0 ? categoryRaw : null),
         custom,
         customValue: custom && customValueRaw ? customValueRaw : null,
       };
@@ -149,7 +153,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function FeedSettingsPage() {
-  const { rows: initialRows, channelCategories } = useLoaderData<typeof loader>();
+  const { rows: initialRows, channelCategories, totalProductCount, productsWithoutType } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -163,7 +168,7 @@ export default function FeedSettingsPage() {
 
   const categoryOptions = [
     { label: "Not selected", value: "" },
-    ...channelCategories.map((cat) => ({ label: cat.path, value: cat.id })),
+    ...channelCategories.map((cat) => ({ label: cat.path, value: String(cat.id) })),
   ];
 
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
@@ -176,16 +181,40 @@ export default function FeedSettingsPage() {
     submit(formData, { method: "POST" });
   };
 
-  const mappedCount = rows.filter((r) => (r.custom ? !!r.customValue : !!r.category)).length;
+  const isRowMapped = (row: CategoryRow) => (row.custom ? !!row.customValue : !!row.category);
+  
+  const unmappedTypedProductCount = rows
+    .filter((row) => !isRowMapped(row))
+    .reduce((sum, row) => sum + row.productCount, 0);
+
+  const totalUnmappedProducts = unmappedTypedProductCount + productsWithoutType;
 
   return (
     <Page title="Feed Settings — Categories" backAction={{ content: "Back", url: "/app/feed" }}>
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-            {actionData?.success && (
+            {totalUnmappedProducts > 0 && (
+              <Banner tone="warning" title="Some products won't have a category in the feed">
+                <BlockStack gap="100">
+                  {unmappedTypedProductCount > 0 && (
+                    <Text as="p">
+                      {`${unmappedTypedProductCount} ${unmappedTypedProductCount === 1 ? "product has" : "products have"} unmapped product types — pick a category below.`}
+                    </Text>
+                  )}
+                  {productsWithoutType > 0 && (
+                    <Text as="p">
+                      {`${productsWithoutType} ${productsWithoutType === 1 ? "product has" : "products have"} no Product type set in Shopify — set it on the product page (Organization → Type), then sync again.`}
+                    </Text>
+                  )}
+                </BlockStack>
+              </Banner>
+            )}
+
+            {actionData?.success === true && (
               <Banner tone="success" title="Category mapping saved" />
             )}
+
             {actionData?.success === false && (
               <Banner tone="critical" title="Could not save mapping">
                 <p>{actionData.error}</p>
@@ -199,9 +228,13 @@ export default function FeedSettingsPage() {
                     <Text as="h2" variant="headingMd">
                       Categories
                     </Text>
-                    <Badge tone={mappedCount === rows.length && rows.length > 0 ? "success" : "attention"}>
-                      {`${mappedCount} of ${rows.length} mapped`}
-                    </Badge>
+                    {totalUnmappedProducts > 0 ? (
+                      <Badge tone="warning">
+                        {`${totalUnmappedProducts} ${totalUnmappedProducts === 1 ? "product" : "products"} without channel category`}
+                      </Badge>
+                    ) : (
+                      <Badge tone="success">All products mapped</Badge>
+                    )}
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Map each of your product types to a Google product category. Unmapped
@@ -209,9 +242,15 @@ export default function FeedSettingsPage() {
                   </Text>
                 </BlockStack>
 
-                {rows.length === 0 && (
+                {rows.length === 0 && totalProductCount === 0 && (
                   <Text as="p" tone="subdued">
-                    No product types found yet — sync your products first.
+                    No products synced yet — sync your products first.
+                  </Text>
+                )}
+
+                {rows.length === 0 && totalProductCount > 0 && (
+                  <Text as="p" tone="subdued">
+                    {`You have ${totalProductCount} ${totalProductCount === 1 ? "product" : "products"} synced, but none have a Product type set in Shopify. Set Product type on your products (Shopify Admin → Products → Organization), sync again, and they'll appear here.`}
                   </Text>
                 )}
 
@@ -223,7 +262,7 @@ export default function FeedSettingsPage() {
                         {row.productType}
                       </Text>
                       <Badge tone={row.productCount > 0 ? undefined : "attention"}>
-                        {`${row.productCount} product${row.productCount === 1 ? "" : "s"}`}
+                        {`${row.productCount} ${row.productCount === 1 ? "product" : "products"}`}
                       </Badge>
                     </InlineStack>
 
