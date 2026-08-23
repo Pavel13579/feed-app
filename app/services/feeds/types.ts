@@ -6,8 +6,14 @@ export interface FeedRenderResult {
   skippedCount: number;
 }
 
+export interface ChannelCategory {
+  id: string;
+  path: string;
+}
+
 export interface FeedAdapter {
   channel: string;
   filename: string;
+  categories: ChannelCategory[];
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult;
 }

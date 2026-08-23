@@ -1,5 +1,5 @@
 import { googleAdapter } from "./adapters/google";
-import { FeedAdapter } from "./types";
+import { ChannelCategory, FeedAdapter } from "./types";
 
 const adaptersRegistry: Record<string, FeedAdapter> = {
   [googleAdapter.channel]: googleAdapter,
@@ -14,4 +14,9 @@ export function getAdapter(channel: string): FeedAdapter {
   }
   
   return adapter;
+}
+
+
+export function getChannelCategories(channel: string): ChannelCategory[] {
+  return getAdapter(channel).categories;
 }

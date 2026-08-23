@@ -1,7 +1,18 @@
-import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult } from "../types";
 import { Prisma } from "@prisma/client";
+import type { NormalizedProduct } from "app/types/NormalizedProduct";
+import type { CategoryMappingRow } from "app/services/feeds/settings";
+import { FeedAdapter, FeedRenderResult } from "../types";
+import { googleCategories } from "./google-categories";
 
+export function resolveCategory(product: Pick<NormalizedProduct, "productType">, mappingRows: CategoryMappingRow[]): string | null {
+  if (!product.productType) return null;
+
+  const row = mappingRows.find((r) => r.productType === product.productType);
+  if (!row) return null;
+
+  const value = row.custom ? row.customValue : row.category;
+  return value && value.trim() ? value : null;
+}
 
 interface GoogleItem {
   id: string;                    
@@ -17,9 +28,15 @@ interface GoogleItem {
   gtin: string | null;           
   mpn: string | null;            
   identifier_exists: "true" | "false";
+  google_product_category: string | null;
+  product_type: string | null;
 }
 
-export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
+export function mapProductsToGoogleItems(
+  products: NormalizedProduct[], 
+  currencyCode: string,
+  mappingRows: CategoryMappingRow[] = []
+): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
 
@@ -29,6 +46,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
       continue;
     }
     const mainImageUrl = product.images?.[0]?.url;
+    const mappedCategory = resolveCategory(product, mappingRows);
 
     for (const variant of product.variants) {
       const variantId = variant.shopifyId;
@@ -66,6 +84,8 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         gtin: gtin,
         mpn: mpn,
         identifier_exists: identifierExists,
+        google_product_category: mappedCategory,
+        product_type: product.productType,
       };
 
       items.push(googleItem);
@@ -78,9 +98,11 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
+  categories: googleCategories,
   
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
-    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
+  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string, settings?: any): FeedRenderResult {
+    const mappingRows: CategoryMappingRow[] = settings?.categoryMapping ?? [];
+    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode, mappingRows);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
@@ -108,6 +130,12 @@ export const googleAdapter: FeedAdapter = {
       }
       if (item.mpn) {
         fields.push(`      <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+      }
+      if (item.google_product_category) {
+        fields.push(`      <g:google_product_category>${escapeXml(item.google_product_category)}</g:google_product_category>`);
+      }
+      if (item.product_type) {
+        fields.push(`      <g:product_type>${escapeXml(item.product_type)}</g:product_type>`);
       }
 
       return `<item>\n${fields.join('\n')}\n</item>`;
@@ -143,7 +171,6 @@ function escapeXml(unsafe: string): string {
     }
   });
 }
-
 
 function isValidGtin(gtin: string | null | undefined): boolean {
   if (!gtin) return false;
