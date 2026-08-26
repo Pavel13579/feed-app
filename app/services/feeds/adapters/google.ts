@@ -1,10 +1,10 @@
-import { Prisma } from "@prisma/client";
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult } from "../types";
 import { googleCategories } from "./google-categories";
+import { formatMinor, getCurrencyExponent } from "app/utils/money";
 
 interface GoogleItem {
-  id: string;                    
+  id: string;                     
   item_group_id: string;          
   title: string;                 
   description: string;           
@@ -12,6 +12,7 @@ interface GoogleItem {
   image_link: string;            
   availability: "in_stock" | "out_of_stock"; 
   price: string;                 
+  sale_price: string | null;     
   condition: "new";              
   brand: string | null;          
   gtin: string | null;           
@@ -21,7 +22,11 @@ interface GoogleItem {
   product_type: string | null;
 }
 
-export function mapProductsToGoogleItems(products: NormalizedProduct[], currencyCode: string): { items: GoogleItem[]; skippedCount: number } {
+export function mapProductsToGoogleItems(
+  products: NormalizedProduct[], 
+  currencyCode: string, 
+  exponent: number
+): { items: GoogleItem[]; skippedCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
 
@@ -34,17 +39,18 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
 
     for (const variant of product.variants) {
       const variantId = variant.shopifyId;
-      const priceValue = variant.price; 
 
-      if (!variantId || !priceValue || !mainImageUrl || !product.link || !currencyCode) {
+      if (!variantId || !mainImageUrl || !product.link || !currencyCode) {
         skippedCount++;
         continue;
       }
 
-      const formattedPrice = `${new Prisma.Decimal(priceValue).toFixed(2)} ${currencyCode}`;
+      const formattedPrice = `${formatMinor(variant.priceMinor, exponent)} ${currencyCode}`;
+      const formattedSalePrice = variant.salePriceMinor !== null
+        ? `${formatMinor(variant.salePriceMinor, exponent)} ${currencyCode}`
+        : null;
 
       const rawGtin = variant.barcode?.trim() || null;
-
       const gtin = isValidGtin(rawGtin) ? rawGtin : null; 
       const mpn = variant.sku?.trim() || null;
       const brand = product.vendor?.trim() || null;
@@ -63,6 +69,7 @@ export function mapProductsToGoogleItems(products: NormalizedProduct[], currency
         image_link: mainImageUrl,
         availability: variant.isAvailable ? "in_stock" : "out_of_stock",
         price: formattedPrice,
+        sale_price: formattedSalePrice,
         condition: "new",
         brand: brand,
         gtin: gtin,
@@ -85,7 +92,8 @@ export const googleAdapter: FeedAdapter = {
   categories: googleCategories,
   
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
-    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode);
+    const exponent = getCurrencyExponent(currencyCode);
+    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode, exponent);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
@@ -93,32 +101,39 @@ export const googleAdapter: FeedAdapter = {
 
     const xmlItems = items.map((item) => {
       const fields: string[] = [
-        `      <g:id>${escapeXml(item.id)}</g:id>`,
-        `      <g:item_group_id>${escapeXml(item.item_group_id)}</g:item_group_id>`,
-        `      <title>${escapeXml(item.title)}</title>`,
-        `      <description>${wrapInCData(item.description)}</description>`,
-        `      <link>${escapeXml(item.link)}</link>`,
-        `      <g:image_link>${escapeXml(item.image_link)}</g:image_link>`,
-        `      <g:availability>${item.availability}</g:availability>`,
-        `      <g:price>${escapeXml(item.price)}</g:price>`,
-        `      <g:condition>${item.condition}</g:condition>`,
-        `      <g:identifier_exists>${item.identifier_exists}</g:identifier_exists>`
+        `       <g:id>${escapeXml(item.id)}</g:id>`,
+        `       <g:item_group_id>${escapeXml(item.item_group_id)}</g:item_group_id>`,
+        `       <title>${escapeXml(item.title)}</title>`,
+        `       <description>${wrapInCData(item.description)}</description>`,
+        `       <link>${escapeXml(item.link)}</link>`,
+        `       <g:image_link>${escapeXml(item.image_link)}</g:image_link>`,
+        `       <g:availability>${item.availability}</g:availability>`,
+        `       <g:price>${escapeXml(item.price)}</g:price>`,
       ];
 
+      if (item.sale_price) {
+        fields.push(`       <g:sale_price>${escapeXml(item.sale_price)}</g:sale_price>`);
+      }
+
+      fields.push(
+        `       <g:condition>${item.condition}</g:condition>`,
+        `       <g:identifier_exists>${item.identifier_exists}</g:identifier_exists>`
+      );
+
       if (item.brand) {
-        fields.push(`      <g:brand>${escapeXml(item.brand)}</g:brand>`);
+        fields.push(`       <g:brand>${escapeXml(item.brand)}</g:brand>`);
       }
       if (item.gtin) {
-        fields.push(`      <g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
+        fields.push(`       <g:gtin>${escapeXml(item.gtin)}</g:gtin>`);
       }
       if (item.mpn) {
-        fields.push(`      <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
+        fields.push(`       <g:mpn>${escapeXml(item.mpn)}</g:mpn>`);
       }
       if (item.google_product_category) {
-        fields.push(`      <g:google_product_category>${escapeXml(item.google_product_category)}</g:google_product_category>`);
+        fields.push(`       <g:google_product_category>${escapeXml(item.google_product_category)}</g:google_product_category>`);
       }
       if (item.product_type) {
-        fields.push(`      <g:product_type>${escapeXml(item.product_type)}</g:product_type>`);
+        fields.push(`       <g:product_type>${escapeXml(item.product_type)}</g:product_type>`);
       }
 
       return `<item>\n${fields.join('\n')}\n</item>`;

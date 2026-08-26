@@ -12,6 +12,7 @@ import {
   Select,
   Checkbox,
   TextField,
+  RadioButton,
   Button,
   Banner,
   Badge,
@@ -22,12 +23,76 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { googleAdapter } from "app/services/feeds/adapters/google";
 import { getChannelCategories } from "app/services/feeds/registry";
-import { getFeedSettings, type CategoryMappingRow, type FeedSettings } from "app/services/feeds/settings";
+import {
+  getFeedSettings,
+  isValidPriceSettings,
+  type CategoryMappingRow,
+  type FeedSettings,
+  type PriceSettings,
+  type PriceMode,
+  type PriceAdjustmentType,
+} from "app/services/feeds/settings";
 
 const CHANNEL = googleAdapter.channel;
 
 interface CategoryRow extends CategoryMappingRow {
   productCount: number;
+}
+
+interface PriceFormState {
+  mode: PriceMode;
+  adjustmentType: PriceAdjustmentType;
+  adjustmentValueRaw: string;
+  taxPercentRaw: string;
+}
+
+function priceSettingsToFormState(price: PriceSettings): PriceFormState {
+  return {
+    mode: price.mode,
+    adjustmentType: price.adjustmentType,
+    adjustmentValueRaw: String(price.adjustmentValue),
+    taxPercentRaw: price.taxPercent !== null ? String(price.taxPercent) : "",
+  };
+}
+
+interface PriceFormErrors {
+  adjustmentValueError?: string;
+  taxPercentError?: string;
+}
+
+function validatePriceForm(form: PriceFormState): PriceFormErrors & { valid: boolean } {
+  const errors: PriceFormErrors = {};
+
+  if (form.mode === "web_plus" || form.mode === "web_minus") {
+    const trimmed = form.adjustmentValueRaw.trim();
+    const value = Number(trimmed);
+    if (trimmed === "" || !Number.isFinite(value) || value < 0) {
+      errors.adjustmentValueError = "Enter a number ≥ 0";
+    }
+  }
+
+  const taxTrimmed = form.taxPercentRaw.trim();
+  if (taxTrimmed !== "") {
+    const value = Number(taxTrimmed);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      errors.taxPercentError = "Enter a number between 0 and 100";
+    }
+  }
+
+  return { ...errors, valid: !errors.adjustmentValueError && !errors.taxPercentError };
+}
+
+function priceFormStateToSettings(form: PriceFormState): PriceSettings {
+  const adjustmentValue =
+    form.mode === "web_plus" || form.mode === "web_minus" ? Number(form.adjustmentValueRaw.trim()) : 0;
+  const taxPercent = form.taxPercentRaw.trim() === "" ? null : Number(form.taxPercentRaw.trim());
+
+  return {
+    mode: form.mode,
+    adjustmentType: form.adjustmentType,
+    adjustmentValue,
+    taxPercent,
+  };
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -84,7 +149,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const productsWithoutType = totalProductCount - typedProductCount;
 
-  return json({ rows, channelCategories, totalProductCount, productsWithoutType });
+  return json({
+    rows,
+    channelCategories,
+    totalProductCount,
+    productsWithoutType,
+    price: feedSettings.price,
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -111,20 +182,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const formData = await request.formData();
-  const raw = formData.get("categoryMapping");
 
-  let parsed: unknown;
+  const rawCategoryMapping = formData.get("categoryMapping");
+
+  let parsedCategoryMapping: unknown;
   try {
-    parsed = JSON.parse(typeof raw === "string" ? raw : "[]");
+    parsedCategoryMapping = JSON.parse(typeof rawCategoryMapping === "string" ? rawCategoryMapping : "[]");
   } catch {
     return json({ success: false as const, error: "Malformed form submission" }, { status: 400 });
   }
 
-  if (!Array.isArray(parsed)) {
+  if (!Array.isArray(parsedCategoryMapping)) {
     return json({ success: false as const, error: "Malformed form submission" }, { status: 400 });
   }
 
-  const categoryMapping: CategoryMappingRow[] = parsed
+  const categoryMapping: CategoryMappingRow[] = parsedCategoryMapping
     .filter(
       (row): row is Record<string, unknown> =>
         !!row && typeof row === "object" && typeof (row as Record<string, unknown>).productType === "string",
@@ -142,7 +214,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     });
 
-  const settings: FeedSettings = { categoryMapping };
+
+  const rawPrice = formData.get("price");
+
+  let parsedPrice: unknown;
+  try {
+    parsedPrice = JSON.parse(typeof rawPrice === "string" ? rawPrice : "null");
+  } catch {
+    return json({ success: false as const, error: "Malformed form submission" }, { status: 400 });
+  }
+
+  if (!isValidPriceSettings(parsedPrice)) {
+    return json(
+      { success: false as const, error: "Invalid price settings — check the values in the Price card." },
+      { status: 400 },
+    );
+  }
+
+  const settings: FeedSettings = { categoryMapping, price: parsedPrice };
 
   await db.feed.update({
     where: { id: feed.id },
@@ -153,18 +242,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function FeedSettingsPage() {
-  const { rows: initialRows, channelCategories, totalProductCount, productsWithoutType } =
-    useLoaderData<typeof loader>();
+  const {
+    rows: initialRows,
+    channelCategories,
+    totalProductCount,
+    productsWithoutType,
+    price: initialPrice,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
 
   const [rows, setRows] = useState<CategoryRow[]>(initialRows);
+  const [priceForm, setPriceForm] = useState<PriceFormState>(() => priceSettingsToFormState(initialPrice));
   const isSaving = navigation.state === "submitting";
 
   useEffect(() => {
     setRows(initialRows);
   }, [initialRows]);
+
+  useEffect(() => {
+    setPriceForm(priceSettingsToFormState(initialPrice));
+  }, [initialPrice]);
 
   const categoryOptions = [
     { label: "Not selected", value: "" },
@@ -175,19 +274,26 @@ export default function FeedSettingsPage() {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
+  const priceErrors = validatePriceForm(priceForm);
+
   const handleSave = () => {
+    if (!priceErrors.valid) return;
+
     const formData = new FormData();
     formData.set("categoryMapping", JSON.stringify(rows));
+    formData.set("price", JSON.stringify(priceFormStateToSettings(priceForm)));
     submit(formData, { method: "POST" });
   };
 
   const isRowMapped = (row: CategoryRow) => (row.custom ? !!row.customValue : !!row.category);
-  
+
   const unmappedTypedProductCount = rows
     .filter((row) => !isRowMapped(row))
     .reduce((sum, row) => sum + row.productCount, 0);
 
   const totalUnmappedProducts = unmappedTypedProductCount + productsWithoutType;
+
+  const showAdjustmentFields = priceForm.mode === "web_plus" || priceForm.mode === "web_minus";
 
   return (
     <Page title="Feed Settings — Categories" backAction={{ content: "Back", url: "/app/feed" }}>
@@ -212,11 +318,11 @@ export default function FeedSettingsPage() {
             )}
 
             {actionData?.success === true && (
-              <Banner tone="success" title="Category mapping saved" />
+              <Banner tone="success" title="Settings saved" />
             )}
 
             {actionData?.success === false && (
-              <Banner tone="critical" title="Could not save mapping">
+              <Banner tone="critical" title="Could not save settings">
                 <p>{actionData.error}</p>
               </Banner>
             )}
@@ -294,16 +400,87 @@ export default function FeedSettingsPage() {
                     )}
                   </BlockStack>
                 ))}
-
-                {rows.length > 0 && (
-                  <InlineStack align="end">
-                    <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={isSaving}>
-                      Save
-                    </Button>
-                  </InlineStack>
-                )}
               </BlockStack>
             </Card>
+
+            <Card>
+              <BlockStack gap="400">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    Price
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Control what price is sent to the feed — as-is from Shopify, or adjusted.
+                  </Text>
+                </BlockStack>
+
+                <Select
+                  label="Price mode"
+                  options={[
+                    { label: "As is (Shopify price)", value: "as_is" },
+                    { label: "Undiscounted price (ignore compare-at)", value: "undiscounted" },
+                    { label: "Store price + adjustment", value: "web_plus" },
+                    { label: "Store price − adjustment", value: "web_minus" },
+                  ]}
+                  value={priceForm.mode}
+                  onChange={(value) => setPriceForm((p) => ({ ...p, mode: value as PriceMode }))}
+                />
+
+                {showAdjustmentFields && (
+                  <BlockStack gap="200">
+                    <TextField
+                      label="Adjustment value"
+                      type="number"
+                      min={0}
+                      value={priceForm.adjustmentValueRaw}
+                      onChange={(value) => setPriceForm((p) => ({ ...p, adjustmentValueRaw: value }))}
+                      error={priceErrors.adjustmentValueError}
+                      autoComplete="off"
+                      helpText={
+                        priceForm.adjustmentType === "fixed"
+                          ? "In your store's currency, major units (e.g. 500, not 50000)"
+                          : undefined
+                      }
+                    />
+                    <InlineStack gap="400">
+                      <RadioButton
+                        label="%"
+                        checked={priceForm.adjustmentType === "percent"}
+                        onChange={() => setPriceForm((p) => ({ ...p, adjustmentType: "percent" }))}
+                      />
+                      <RadioButton
+                        label="Fixed amount"
+                        checked={priceForm.adjustmentType === "fixed"}
+                        onChange={() => setPriceForm((p) => ({ ...p, adjustmentType: "fixed" }))}
+                      />
+                    </InlineStack>
+                  </BlockStack>
+                )}
+
+                <TextField
+                  label="Tax %"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={priceForm.taxPercentRaw}
+                  onChange={(value) => setPriceForm((p) => ({ ...p, taxPercentRaw: value }))}
+                  error={priceErrors.taxPercentError}
+                  placeholder="Leave empty to not apply tax"
+                  autoComplete="off"
+                />
+              </BlockStack>
+            </Card>
+
+            <InlineStack align="end">
+              <Button
+                variant="primary"
+                onClick={handleSave}
+                loading={isSaving}
+                disabled={isSaving || !priceErrors.valid}
+              >
+                Save
+              </Button>
+            </InlineStack>
           </BlockStack>
         </Layout.Section>
       </Layout>
