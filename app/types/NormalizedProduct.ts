@@ -1,5 +1,5 @@
 export interface NormalizedProduct {
-  id: string;             
+  id: string;           
   shopifyId: string;
   title: string;
   descriptionHtml: string | null;
@@ -12,14 +12,13 @@ export interface NormalizedProduct {
   variants: NormalizedVariant[];
 }
 
-
 export interface NormalizedVariant {
   id: string;           
   shopifyId: string;     
   sku: string | null;
   barcode: string | null; 
-  price: string;          
-  compareAtPrice: string | null;
+  priceMinor: number;          
+  salePriceMinor: number | null;
   inventoryQuantity: number;
   isAvailable: boolean;
 }

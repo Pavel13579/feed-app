@@ -2,6 +2,7 @@ import { dbProductToNormalized } from "./normalizer.server";
 import db from "../db.server";
 import { getAdapter } from "app/services/feeds/registry";
 import { getFeedSettings } from "app/services/feeds/settings";
+import { getCurrencyExponent } from "app/utils/money";
 
 export async function generateFeed(feedId: string) {
   const feed = await db.feed.findUnique({
@@ -22,16 +23,19 @@ export async function generateFeed(feedId: string) {
     );
   }
   const currencyCode = shop.currencyCode;
+  
+  const exponent = getCurrencyExponent(currencyCode);
 
   const adapter = getAdapter(channel);
   
-  const { categoryMapping } = getFeedSettings(feed.settings);
+  const feedSettings = getFeedSettings(feed.settings);
 
   try {
     const dbProducts = await db.product.findMany({
-      where: { shopId: shopId,
+      where: { 
+        shopId: shopId,
         status: "ACTIVE",
-       },
+      },
       include: {
         variants: true,
         images: { orderBy: { position: "asc" } },
@@ -39,7 +43,6 @@ export async function generateFeed(feedId: string) {
     });
 
     if (dbProducts.length === 0) {
-      
       const { xml } = adapter.render([], shopDomain, currencyCode);
 
       const updatedFeed = await db.feed.update({
@@ -58,7 +61,13 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(product, shopDomain, categoryMapping)
+      dbProductToNormalized(
+        product, 
+        shopDomain, 
+        feedSettings.categoryMapping, 
+        feedSettings.price, 
+        exponent
+      )
     );
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
