@@ -284,7 +284,7 @@ export default function FeedSettingsPage() {
   const showAdjustmentFields = priceForm.mode === "web_plus" || priceForm.mode === "web_minus";
 
   return (
-    <Page title="Feed Settings — Categories" backAction={{ content: "Back", url: "/app/feed" }}>
+    <Page title="Feed Settings" backAction={{ content: "Back", url: "/app/feed" }}>
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">

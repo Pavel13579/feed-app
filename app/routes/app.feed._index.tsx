@@ -117,7 +117,7 @@ export default function FeedPage() {
 
   return (
     <Page 
-      title="Feed Settings"
+      title="Feed Generation"
       backAction={{ content: "Back", url: "/app" }} 
     >
       <Layout>
