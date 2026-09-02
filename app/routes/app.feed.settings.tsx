@@ -32,6 +32,7 @@ import {
   type PriceMode,
   type PriceAdjustmentType,
 } from "app/services/feeds/settings";
+import { ensureShopAndFeed } from "app/models/feed.server";
 
 const CHANNEL = googleAdapter.channel;
 
@@ -162,24 +163,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  let shop = await db.shop.findUnique({ where: { shopDomain } });
-  if (!shop) {
-    shop = await db.shop.create({ data: { shopDomain } });
-  }
-
-  let feed = await db.feed.findFirst({ where: { shopId: shop.id, channel: CHANNEL } });
-  if (!feed) {
-    feed = await db.feed.create({
-      data: {
-        shopId: shop.id,
-        channel: CHANNEL,
-        name: "Google Shopping Feed",
-        token: crypto.randomUUID(),
-        content: "",
-        itemCount: 0,
-      },
-    });
-  }
+ const { feed } = await ensureShopAndFeed(
+    shopDomain, 
+    googleAdapter.channel, 
+    "Google Shopping Feed"
+  );
 
   const formData = await request.formData();
 

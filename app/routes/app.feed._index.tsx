@@ -17,7 +17,7 @@ import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { json } from "@remix-run/node";
 import { googleAdapter } from "app/services/feeds/adapters/google";
-import { generateFeed } from "app/models/feed.server";
+import { ensureShopAndFeed, generateFeed } from "app/models/feed.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -49,35 +49,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  let shop = await db.shop.findUnique({
-    where: { shopDomain: shopDomain },
-  });
-
-  if (!shop) {
-    shop = await db.shop.create({
-      data: { shopDomain: shopDomain },
-    });
-  }
-
-  let feed = await db.feed.findFirst({
-    where: {
-      shopId: shop.id,
-      channel: googleAdapter.channel,
-    },
-  });
-
-  if (!feed) {
-    feed = await db.feed.create({
-      data: {
-        shopId: shop.id,
-        channel: googleAdapter.channel,
-        name: "Google Shopping Feed",
-        token: crypto.randomUUID(),
-        content: "",
-        itemCount: 0,
-      },
-    });
-  }
+   const { feed } = await ensureShopAndFeed(
+      shopDomain, 
+      googleAdapter.channel, 
+      "Google Shopping Feed"
+    );
 
   try {
     const updatedFeed = await generateFeed(feed.id);
