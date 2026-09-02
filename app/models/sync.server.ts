@@ -218,19 +218,20 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
     create: { shopDomain, currencyCode },
   });
 
+  const mappedProducts = products.map((prod) => mapShopifyProduct(prod));
 
-  const shopifyIdsFromApi = products.map((prod) => mapShopifyProduct(prod).shopifyId);
+  const shopifyIdsFromApi = mappedProducts.map((mapped) => mapped.shopifyId);
 
   let synced = 0;
   let failed = 0;
   let imagesTruncatedCount = 0;
-  for(const prod of products){
-    const tempObject = mapShopifyProduct(prod);
+
+  for (const tempObject of mappedProducts) {
     if (tempObject.imagesTruncated) imagesTruncatedCount += 1;
-    try{
+    try {
       await upsertProducts(shop.id, tempObject);
       synced = synced + 1;
-    }catch(error){
+    } catch (error) {
       failed += 1;
       console.error(`Failed to sync product [ID: ${tempObject.shopifyId}] "${tempObject.title}":`, error);
     }
@@ -253,7 +254,6 @@ export async function syncAllProducts(admin: AdminApiContext, shopDomain: string
   }
 
   const isSuccessfulSync = failed === 0 && (synced > 0 || products.length === 0);
-
 
   if (isSuccessfulSync) {
     await prisma.shop.update({
