@@ -255,7 +255,7 @@ export default function FeedSettingsPage() {
 
   const categoryOptions = [
     { label: "Not selected", value: "" },
-    ...channelCategories.map((cat) => ({ label: cat.path, value: String(cat.id) })),
+    ...channelCategories.map((cat) => ({ label: cat.path, value: cat.path })),
   ];
 
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
