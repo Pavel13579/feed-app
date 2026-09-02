@@ -61,13 +61,12 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(
-        product, 
-        shopDomain, 
-        feedSettings.categoryMapping, 
-        feedSettings.price, 
-        exponent
-      )
+      dbProductToNormalized({
+        product,
+        shopDomain,
+        settings: feedSettings,
+        exponent,
+      })
     );
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);

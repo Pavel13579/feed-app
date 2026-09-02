@@ -1,8 +1,15 @@
 import type { Product, Variant, Image } from "@prisma/client";
 import type { NormalizedProduct, NormalizedVariant } from "../types/NormalizedProduct";
-import type { CategoryMappingRow, PriceSettings } from "app/services/feeds/settings";
+import type { CategoryMappingRow, FeedSettings, PriceSettings } from "app/services/feeds/settings";
 import { resolveCategory } from "./categoryResolver.server";
 import { computeFeedPrice } from "app/utils/price";
+
+export interface NormalizeOptions {
+  product: DbProductWithRelations;
+  shopDomain: string;
+  settings: FeedSettings;
+  exponent: number;
+}
 
 export type DbProductWithRelations = Product & {
   variants: Variant[];
@@ -10,11 +17,7 @@ export type DbProductWithRelations = Product & {
 };
 
 export function dbProductToNormalized(
-  product: DbProductWithRelations, 
-  shopDomain: string, 
-  mappingRows: CategoryMappingRow[],
-  priceSettings: PriceSettings,
-  exponent: number
+  {product, shopDomain, settings, exponent,}: NormalizeOptions
 ): NormalizedProduct {
   const productLink = product.onlineStoreUrl
     ? product.onlineStoreUrl
@@ -35,7 +38,7 @@ export function dbProductToNormalized(
         price: v.price.toString(),
         compareAtPrice: v.compareAtPrice ? v.compareAtPrice.toString() : null,
       },
-      priceSettings,
+      settings.price,
       exponent
     );
 
@@ -60,7 +63,7 @@ export function dbProductToNormalized(
     productType: product.productType,
     status: product.status,
     link: productLink, 
-    category: resolveCategory({ productType: product.productType }, mappingRows),
+    category: resolveCategory({ productType: product.productType }, settings.categoryMapping),
     images: sortedImages,
     variants: normalizedVariants,
   };
