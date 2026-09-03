@@ -28,18 +28,33 @@ export function toMinor(decimalString: string, exponent: number): number {
   const integerPart = parts[0] || "0";
   let fractionPart = parts[1] || "";
 
+  const sign = integerPart.startsWith("-") ? -1 : 1;
+  const absInteger = integerPart.replace("-", "");
+
   if (exponent === 0) {
-    return parseInt(integerPart, 10);
+    const firstFractionDigit = parseInt(fractionPart[0] || "0", 10);
+    let intVal = parseInt(absInteger, 10);
+    if (firstFractionDigit >= 5) {
+      intVal += 1;
+    }
+    return sign * intVal;
   }
 
   if (fractionPart.length < exponent) {
     fractionPart = fractionPart.padEnd(exponent, "0");
-  } else if (fractionPart.length > exponent) {
-    fractionPart = fractionPart.slice(0, exponent);
-  }
+  } 
+  else if (fractionPart.length > exponent) {
+    const keptFraction = fractionPart.slice(0, exponent);
+    const nextDigit = parseInt(fractionPart[exponent], 10);
 
-  const sign = integerPart.startsWith("-") ? -1 : 1;
-  const absInteger = integerPart.replace("-", "");
+    let combined = `${absInteger}${keptFraction}`;
+    let numVal = parseInt(combined, 10);
+
+    if (nextDigit >= 5) {
+      numVal += 1;
+    }
+    return sign * numVal;
+  }
 
   const combined = `${absInteger}${fractionPart}`;
   return sign * parseInt(combined, 10);
