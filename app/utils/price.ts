@@ -16,19 +16,18 @@ function applyPercent(baseMinor: number, percent: number): number {
   return Math.round((baseMinor * bps) / 10000);
 }
 
-function fixedAdjustmentToMinor(adjustmentValue: number, exponent: number): number {
-  return toMinor(adjustmentValue.toFixed(exponent), exponent);
+function fixedAdjustmentToMinor(adjustmentValue: string, exponent: number): number {
+  return toMinor(adjustmentValue, exponent);
 }
 
 function applyAdjustment(minor: number, settings: PriceSettings, exponent: number): number {
   const delta =
     settings.adjustmentType === "percent"
-      ? applyPercent(minor, settings.adjustmentValue)
-      : fixedAdjustmentToMinor(settings.adjustmentValue, exponent);
+      ? applyPercent(minor, Number(settings.adjustmentValue))
+      : fixedAdjustmentToMinor(String(settings.adjustmentValue), exponent);
 
   return settings.mode === "web_plus" ? minor + delta : minor - delta;
 }
-
 function applyTax(minor: number, taxPercent: number | null): number {
   if (taxPercent === null) return minor;
   return minor + applyPercent(minor, taxPercent);

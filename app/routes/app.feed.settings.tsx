@@ -85,13 +85,13 @@ function validatePriceForm(form: PriceFormState): PriceFormErrors & { valid: boo
 
 function priceFormStateToSettings(form: PriceFormState): PriceSettings {
   const adjustmentValue =
-    form.mode === "web_plus" || form.mode === "web_minus" ? Number(form.adjustmentValueRaw.trim()) : 0;
+    form.mode === "web_plus" || form.mode === "web_minus" ? form.adjustmentValueRaw.trim() : "0";
   const taxPercent = form.taxPercentRaw.trim() === "" ? null : Number(form.taxPercentRaw.trim());
 
   return {
     mode: form.mode,
     adjustmentType: form.adjustmentType,
-    adjustmentValue,
+    adjustmentValue, 
     taxPercent,
   };
 }
