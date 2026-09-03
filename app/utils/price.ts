@@ -52,16 +52,8 @@ export function computeFeedPrice(
 
   const hasValidDiscount = compareAtMinor !== null && compareAtMinor > priceMinor;
 
-  let regular: number;
-  let sale: number | null;
-
-  if (settings.mode === "undiscounted") {
-    regular = hasValidDiscount ? (compareAtMinor as number) : priceMinor;
-    sale = null;
-  } else {
-    regular = hasValidDiscount ? (compareAtMinor as number) : priceMinor;
-    sale = hasValidDiscount ? priceMinor : null;
-  }
+  let regular = hasValidDiscount ? (compareAtMinor as number) : priceMinor;
+  let sale = settings.mode === "undiscounted" ? null : (hasValidDiscount ? priceMinor : null);
 
   if (settings.mode === "web_plus" || settings.mode === "web_minus" || settings.taxPercent !== null) {
     regular = applyPricingPipeline(regular, settings, exponent);
