@@ -11,26 +11,35 @@ export interface FeedPriceResult {
   salePriceMinor: number | null;
 }
 
-function applyPercent(baseMinor: number, percent: number): number {
-  const bps = Math.round(percent * 100);
-  return Math.round((baseMinor * bps) / 10000);
-}
+/**
+ * Single-point final rounding pipeline (Contract M-6.3):
+ * Applies adjustments and taxes sequentially using high-precision math
+ */
+function applyPricingPipeline(
+  baseMinor: number,
+  settings: PriceSettings,
+  exponent: number,
+): number {
+  let currentVal = baseMinor;
 
-function fixedAdjustmentToMinor(adjustmentValue: string, exponent: number): number {
-  return toMinor(adjustmentValue, exponent);
-}
+  if (settings.mode === "web_plus" || settings.mode === "web_minus") {
+    if (settings.adjustmentType === "percent") {
+      const percent = Number(settings.adjustmentValue);
+      const bps = Math.round(percent * 100);
+      const delta = (baseMinor * bps) / 10000;
+      currentVal = settings.mode === "web_plus" ? baseMinor + delta : baseMinor - delta;
+    } else {
+      const fixedMinor = toMinor(settings.adjustmentValue, exponent);
+      currentVal = settings.mode === "web_plus" ? baseMinor + fixedMinor : baseMinor - fixedMinor;
+    }
+  }
 
-function applyAdjustment(minor: number, settings: PriceSettings, exponent: number): number {
-  const delta =
-    settings.adjustmentType === "percent"
-      ? applyPercent(minor, Number(settings.adjustmentValue))
-      : fixedAdjustmentToMinor(String(settings.adjustmentValue), exponent);
+  if (settings.taxPercent !== null) {
+    const taxBps = Math.round(settings.taxPercent * 100);
+    currentVal = currentVal * (1 + taxBps / 10000);
+  }
 
-  return settings.mode === "web_plus" ? minor + delta : minor - delta;
-}
-function applyTax(minor: number, taxPercent: number | null): number {
-  if (taxPercent === null) return minor;
-  return minor + applyPercent(minor, taxPercent);
+  return Math.round(currentVal);
 }
 
 export function computeFeedPrice(
@@ -54,13 +63,12 @@ export function computeFeedPrice(
     sale = hasValidDiscount ? priceMinor : null;
   }
 
-  if (settings.mode === "web_plus" || settings.mode === "web_minus") {
-    regular = applyAdjustment(regular, settings, exponent);
-    if (sale !== null) sale = applyAdjustment(sale, settings, exponent);
+  if (settings.mode === "web_plus" || settings.mode === "web_minus" || settings.taxPercent !== null) {
+    regular = applyPricingPipeline(regular, settings, exponent);
+    if (sale !== null) {
+      sale = applyPricingPipeline(sale, settings, exponent);
+    }
   }
-
-  regular = applyTax(regular, settings.taxPercent);
-  if (sale !== null) sale = applyTax(sale, settings.taxPercent);
 
   if (regular <= 0) {
     return null;
