@@ -38,7 +38,7 @@ export function computeFeedPrice(
   variant: FeedVariantPrice,
   settings: PriceSettings,
   exponent: number,
-): FeedPriceResult {
+): FeedPriceResult | null {
   const priceMinor = toMinor(variant.price, exponent);
   const compareAtMinor = variant.compareAtPrice !== null ? toMinor(variant.compareAtPrice, exponent) : null;
 
@@ -63,9 +63,13 @@ export function computeFeedPrice(
   regular = applyTax(regular, settings.taxPercent);
   if (sale !== null) sale = applyTax(sale, settings.taxPercent);
 
-  regular = Math.max(0, regular);
-  if (sale !== null) sale = Math.max(0, sale);
+  if (regular <= 0) {
+    return null;
+  }
 
+  if (sale !== null && sale <= 0) {
+    sale = null;
+  }
   if (sale !== null && sale >= regular) {
     sale = null;
   }

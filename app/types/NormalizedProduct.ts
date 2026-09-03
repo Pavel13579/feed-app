@@ -17,7 +17,7 @@ export interface NormalizedVariant {
   shopifyId: string;     
   sku: string | null;
   barcode: string | null; 
-  priceMinor: number;          
+  priceMinor: number | null;          
   salePriceMinor: number | null;
   inventoryQuantity: number;
   isAvailable: boolean;

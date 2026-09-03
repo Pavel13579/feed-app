@@ -47,8 +47,8 @@ export function dbProductToNormalized(
       shopifyId: v.shopifyId,
       sku: v.sku,
       barcode: v.barcode,
-      priceMinor: feedPrice.priceMinor,
-      salePriceMinor: feedPrice.salePriceMinor,
+      priceMinor: feedPrice ? feedPrice.priceMinor : null,
+      salePriceMinor: feedPrice ? feedPrice.salePriceMinor : null,
       inventoryQuantity: v.inventoryQuantity,
       isAvailable: v.inventoryQuantity > 0,
     };

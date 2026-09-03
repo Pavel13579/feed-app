@@ -4,6 +4,7 @@ export interface FeedRenderResult {
   xml: string;
   itemCount: number;
   skippedCount: number;
+  invalidPriceCount: number;
 }
 
 export interface ChannelCategory {

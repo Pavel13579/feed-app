@@ -26,9 +26,10 @@ export function mapProductsToGoogleItems(
   products: NormalizedProduct[], 
   currencyCode: string, 
   exponent: number
-): { items: GoogleItem[]; skippedCount: number } {
+): { items: GoogleItem[]; skippedCount: number; invalidPriceCount: number } {
   const items: GoogleItem[] = [];
   let skippedCount = 0;
+  let invalidPriceCount = 0;
 
   for (const product of products) {
     if (product.status && product.status.toUpperCase() !== "ACTIVE") {
@@ -39,6 +40,11 @@ export function mapProductsToGoogleItems(
 
     for (const variant of product.variants) {
       const variantId = variant.shopifyId;
+
+      if (variant.priceMinor === null) {
+        invalidPriceCount++;
+        continue;
+      }
 
       if (!variantId || !mainImageUrl || !product.link || !currencyCode) {
         skippedCount++;
@@ -83,7 +89,7 @@ export function mapProductsToGoogleItems(
     }
   }
 
-  return { items, skippedCount };
+  return { items, skippedCount, invalidPriceCount };
 }
 
 export const googleAdapter: FeedAdapter = {
@@ -93,10 +99,13 @@ export const googleAdapter: FeedAdapter = {
   
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
     const exponent = getCurrencyExponent(currencyCode);
-    const { items, skippedCount } = mapProductsToGoogleItems(products, currencyCode, exponent);
+    const { items, skippedCount, invalidPriceCount } = mapProductsToGoogleItems(products, currencyCode, exponent);
 
     if (skippedCount > 0) {
       console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
+    }
+    if (invalidPriceCount > 0) {
+      console.warn(`Google Adapter: ${invalidPriceCount} item(s) had no valid price after Price settings.`);
     }
 
     const xmlItems = items.map((item) => {
@@ -153,6 +162,7 @@ export const googleAdapter: FeedAdapter = {
       xml,
       itemCount: items.length,
       skippedCount,
+      invalidPriceCount,
     };
   }
 };
