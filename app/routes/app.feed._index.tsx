@@ -49,11 +49,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-   const { feed } = await ensureShopAndFeed(
-      shopDomain, 
-      googleAdapter.channel, 
-      "Google Shopping Feed"
-    );
+  const { feed } = await ensureShopAndFeed(
+    shopDomain, 
+    googleAdapter.channel, 
+    "Google Shopping Feed"
+  );
 
   try {
     const updatedFeed = await generateFeed(feed.id);
@@ -95,11 +95,11 @@ export default function FeedPage() {
     submit(null, { method: "POST" });
   };
 
-   const handleCopyUrl = useCallback(async () => {
-     if (!feedUrl) return;
+  const handleCopyUrl = useCallback(async () => {
+    if (!feedUrl) return;
     try {
       await navigator.clipboard.writeText(feedUrl);
-     setIsCopied(true);
+      setIsCopied(true);
 
       if (typeof shopify !== 'undefined' && shopify.toast) {
         shopify.toast.show('Link copied');
@@ -113,7 +113,7 @@ export default function FeedPage() {
         shopify.toast.show('Could not copy link — please copy it manually', { isError: true });
       }
     }
-   }, [feedUrl]);
+  }, [feedUrl]);
 
   return (
     <Page 
@@ -134,7 +134,7 @@ export default function FeedPage() {
                       <strong>Items (variants) processed:</strong> <Badge tone="info">{actionData.feed.itemCount.toString()}</Badge>
                     </List.Item>
                     <List.Item>
-                        <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems.toString()}</Badge>
+                      <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems.toString()}</Badge>
                     </List.Item>
                     <List.Item>
                       <strong>XML Size:</strong> {actionData.feed.sizeKb} KB

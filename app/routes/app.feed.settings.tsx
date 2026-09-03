@@ -84,8 +84,7 @@ function validatePriceForm(form: PriceFormState): PriceFormErrors & { valid: boo
 }
 
 function priceFormStateToSettings(form: PriceFormState): PriceSettings {
-  const adjustmentValue =
-    form.mode === "web_plus" || form.mode === "web_minus" ? form.adjustmentValueRaw.trim() : "0";
+  const adjustmentValue = form.adjustmentValueRaw.trim() !== "" ? form.adjustmentValueRaw.trim() : "0";
   const taxPercent = form.taxPercentRaw.trim() === "" ? null : Number(form.taxPercentRaw.trim());
 
   return {
@@ -163,7 +162,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
- const { feed } = await ensureShopAndFeed(
+  const { feed } = await ensureShopAndFeed(
     shopDomain, 
     googleAdapter.channel, 
     "Google Shopping Feed"
@@ -201,7 +200,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         customValue: custom && customValueRaw ? customValueRaw : null,
       };
     });
-
 
   const rawPrice = formData.get("price");
 
