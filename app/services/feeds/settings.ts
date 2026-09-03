@@ -16,7 +16,7 @@ export const PRICE_ADJUSTMENT_TYPES: readonly PriceAdjustmentType[] = ["percent"
 export interface PriceSettings {
   mode: PriceMode;
   adjustmentType: PriceAdjustmentType;
-  adjustmentValue: number;
+  adjustmentValue: string;
   taxPercent: number | null;
 }
 
@@ -28,7 +28,7 @@ export interface FeedSettings {
 const DEFAULT_PRICE_SETTINGS: PriceSettings = {
   mode: "as_is",
   adjustmentType: "percent",
-  adjustmentValue: 0,
+  adjustmentValue: "0",
   taxPercent: null,
 };
 
@@ -55,9 +55,19 @@ export function isValidPriceSettings(value: unknown): value is PriceSettings {
 
   if (!PRICE_MODES.includes(v.mode as PriceMode)) return false;
   if (!PRICE_ADJUSTMENT_TYPES.includes(v.adjustmentType as PriceAdjustmentType)) return false;
-  if (typeof v.adjustmentValue !== "number" || !Number.isFinite(v.adjustmentValue) || v.adjustmentValue < 0) {
-    return false;
+
+  if (typeof v.adjustmentValue !== "string") {
+    if (typeof v.adjustmentValue !== "number" || !Number.isFinite(v.adjustmentValue) || v.adjustmentValue < 0) {
+      return false;
+    }
+  } else {
+    const trimmed = v.adjustmentValue.trim();
+    const num = Number(trimmed);
+    if (trimmed === "" || !Number.isFinite(num) || num < 0) {
+      return false;
+    }
   }
+
   if (
     v.taxPercent !== null &&
     (typeof v.taxPercent !== "number" || !Number.isFinite(v.taxPercent) || v.taxPercent < 0 || v.taxPercent > 100)
@@ -80,10 +90,16 @@ function resolvePriceSettings(value: unknown): PriceSettings {
     ? (raw.adjustmentType as PriceAdjustmentType)
     : DEFAULT_PRICE_SETTINGS.adjustmentType;
 
-  const adjustmentValue =
-    typeof raw.adjustmentValue === "number" && Number.isFinite(raw.adjustmentValue) && raw.adjustmentValue >= 0
-      ? raw.adjustmentValue
-      : DEFAULT_PRICE_SETTINGS.adjustmentValue;
+  let adjustmentValue = DEFAULT_PRICE_SETTINGS.adjustmentValue;
+  if (typeof raw.adjustmentValue === "string") {
+    const trimmed = raw.adjustmentValue.trim();
+    const num = Number(trimmed);
+    if (trimmed !== "" && Number.isFinite(num) && num >= 0) {
+      adjustmentValue = trimmed;
+    }
+  } else if (typeof raw.adjustmentValue === "number" && Number.isFinite(raw.adjustmentValue) && raw.adjustmentValue >= 0) {
+    adjustmentValue = String(raw.adjustmentValue);
+  }
 
   const taxPercent =
     raw.taxPercent === null
