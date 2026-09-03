@@ -32,6 +32,7 @@ import {
   type PriceMode,
   type PriceAdjustmentType,
 } from "app/services/feeds/settings";
+import { ensureShopAndFeed } from "app/models/feed.server";
 
 const CHANNEL = googleAdapter.channel;
 
@@ -162,24 +163,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopDomain = session.shop;
 
-  let shop = await db.shop.findUnique({ where: { shopDomain } });
-  if (!shop) {
-    shop = await db.shop.create({ data: { shopDomain } });
-  }
-
-  let feed = await db.feed.findFirst({ where: { shopId: shop.id, channel: CHANNEL } });
-  if (!feed) {
-    feed = await db.feed.create({
-      data: {
-        shopId: shop.id,
-        channel: CHANNEL,
-        name: "Google Shopping Feed",
-        token: crypto.randomUUID(),
-        content: "",
-        itemCount: 0,
-      },
-    });
-  }
+ const { feed } = await ensureShopAndFeed(
+    shopDomain, 
+    googleAdapter.channel, 
+    "Google Shopping Feed"
+  );
 
   const formData = await request.formData();
 
@@ -267,7 +255,7 @@ export default function FeedSettingsPage() {
 
   const categoryOptions = [
     { label: "Not selected", value: "" },
-    ...channelCategories.map((cat) => ({ label: cat.path, value: String(cat.id) })),
+    ...channelCategories.map((cat) => ({ label: cat.path, value: cat.path })),
   ];
 
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
@@ -296,7 +284,7 @@ export default function FeedSettingsPage() {
   const showAdjustmentFields = priceForm.mode === "web_plus" || priceForm.mode === "web_minus";
 
   return (
-    <Page title="Feed Settings — Categories" backAction={{ content: "Back", url: "/app/feed" }}>
+    <Page title="Feed Settings" backAction={{ content: "Back", url: "/app/feed" }}>
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">

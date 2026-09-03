@@ -61,13 +61,12 @@ export async function generateFeed(feedId: string) {
     }
 
     const normalizedProducts = dbProducts.map((product) =>
-      dbProductToNormalized(
-        product, 
-        shopDomain, 
-        feedSettings.categoryMapping, 
-        feedSettings.price, 
-        exponent
-      )
+      dbProductToNormalized({
+        product,
+        shopDomain,
+        settings: feedSettings,
+        exponent,
+      })
     );
 
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
@@ -94,4 +93,31 @@ export async function generateFeed(feedId: string) {
     console.error(`Failed for feed ${feedId}:`, error);
     throw error;
   }
+}
+
+
+export async function ensureShopAndFeed(shopDomain: string, channel: string, defaultName: string) {
+  let shop = await db.shop.findUnique({ where: { shopDomain } });
+  if (!shop) {
+    shop = await db.shop.create({ data: { shopDomain } });
+  }
+
+  let feed = await db.feed.findFirst({
+    where: { shopId: shop.id, channel },
+  });
+
+  if (!feed) {
+    feed = await db.feed.create({
+      data: {
+        shopId: shop.id,
+        channel,
+        name: defaultName,
+        token: crypto.randomUUID(),
+        content: "",
+        itemCount: 0,
+      },
+    });
+  }
+
+  return { shop, feed };
 }
