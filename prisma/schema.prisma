@@ -110,11 +110,34 @@ model Feed {
   content         String?   @db.Text
   settings        Json?
   lastGeneratedAt DateTime?
-  itemCount       Int       @default(0) 
+  itemCount       Int       @default(0)
+
+  healthScore     Int?
+  errorCount      Int         @default(0)
+  warningCount    Int         @default(0)
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  issues          FeedIssue[]
 
   @@index([shopId])
+}
+
+
+
+model FeedIssue {
+  id        String   @id @default(uuid())
+  feedId    String
+  productId String
+  variantId String?
+  code      String   
+  severity  String   
+  message   String?
+
+  feed      Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
+
+  @@index([feedId, code])
+  @@index([feedId, productId])
 }
