@@ -3,6 +3,7 @@ import db from "../db.server";
 import { getAdapter } from "app/services/feeds/registry";
 import { getFeedSettings } from "app/services/feeds/settings";
 import { getCurrencyExponent } from "app/utils/money";
+import { checkProducts } from "app/services/feeds/health";
 
 export async function generateFeed(feedId: string) {
   const feed = await db.feed.findUnique({
@@ -50,6 +51,9 @@ export async function generateFeed(feedId: string) {
         data: {
           content: xml, 
           itemCount: 0,
+          errorCount: 0,
+          warningCount: 0,
+          healthScore: 100,
           lastGeneratedAt: new Date(),
         },
       });
@@ -57,6 +61,9 @@ export async function generateFeed(feedId: string) {
       return {
         ...updatedFeed,
         skippedItems: 0,
+        errorCount: 0,
+        warningCount: 0,
+        healthScore: 100,
       };
     }
 
@@ -69,24 +76,58 @@ export async function generateFeed(feedId: string) {
       })
     );
 
+    const rawIssues = checkProducts(normalizedProducts, adapter.rules);
+
+    const errorCount = rawIssues.filter(i => i.severity === "error").length;
+    const warningCount = rawIssues.filter(i => i.severity === "warning").length;
+
+    const totalVariants = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
+    const healthScore = totalVariants > 0
+      ? Math.max(0, Math.round(((totalVariants - errorCount) / totalVariants) * 100))
+      : 100;
+
     const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
 
     if (itemCount === 0 && skippedCount > 0) {
       console.warn(`Feed ${feedId}: 0 items, ${skippedCount} skipped — saving empty feed.`);
     }
 
-    const updatedFeed = await db.feed.update({
-      where: { id: feedId },
-      data: {
-        content: xml,
-        itemCount: itemCount, 
-        lastGeneratedAt: new Date(),
-      },
+    const updatedFeed = await db.$transaction(async (tx) => {
+      await tx.feedIssue.deleteMany({ where: { feedId } });
+
+      if (rawIssues.length > 0) {
+        await tx.feedIssue.createMany({
+          data: rawIssues.map((issue) => ({
+            feedId,
+            productId: issue.productId,
+            variantId: issue.variantId,
+            code: issue.code,
+            severity: issue.severity,
+            message: issue.message,
+          })),
+        });
+      }
+
+    
+      return tx.feed.update({
+        where: { id: feedId },
+        data: {
+          content: xml,
+          itemCount: itemCount, 
+          errorCount,
+          warningCount,
+          healthScore,
+          lastGeneratedAt: new Date(),
+        },
+      });
     });
 
     return {
       ...updatedFeed,
       skippedItems: skippedCount,
+      errorCount,
+      warningCount,
+      healthScore,
     };
 
   } catch (error) {
@@ -94,7 +135,6 @@ export async function generateFeed(feedId: string) {
     throw error;
   }
 }
-
 
 export async function ensureShopAndFeed(shopDomain: string, channel: string, defaultName: string) {
   let shop = await db.shop.findUnique({ where: { shopDomain } });
