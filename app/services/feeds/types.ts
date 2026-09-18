@@ -35,3 +35,16 @@ export interface FeedAdapter {
   rules: FeedRule[];
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult;
 }
+
+export type FeedIssueGroup = {
+  code: string;
+  severity: Severity;
+  productCount: number;
+};
+
+export type FeedSummary = {
+  healthScore: number | null;
+  errorCount: number;
+  warningCount: number;
+  groups: FeedIssueGroup[];
+};
