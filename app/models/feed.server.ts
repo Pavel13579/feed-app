@@ -28,7 +28,6 @@ export async function generateFeed(feedId: string) {
   const exponent = getCurrencyExponent(currencyCode);
 
   const adapter = getAdapter(channel);
-  
   const feedSettings = getFeedSettings(feed.settings);
 
   try {
@@ -60,7 +59,6 @@ export async function generateFeed(feedId: string) {
 
       return {
         ...updatedFeed,
-        skippedItems: 0,
         errorCount: 0,
         warningCount: 0,
         healthScore: 100,
@@ -86,11 +84,7 @@ export async function generateFeed(feedId: string) {
       ? Math.max(0, Math.round(((totalVariants - errorCount) / totalVariants) * 100))
       : 100;
 
-    const { xml, itemCount, skippedCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
-
-    if (itemCount === 0 && skippedCount > 0) {
-      console.warn(`Feed ${feedId}: 0 items, ${skippedCount} skipped — saving empty feed.`);
-    }
+    const { xml, itemCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
 
     const updatedFeed = await db.$transaction(async (tx) => {
       await tx.feedIssue.deleteMany({ where: { feedId } });
@@ -108,7 +102,6 @@ export async function generateFeed(feedId: string) {
         });
       }
 
-    
       return tx.feed.update({
         where: { id: feedId },
         data: {
@@ -124,7 +117,6 @@ export async function generateFeed(feedId: string) {
 
     return {
       ...updatedFeed,
-      skippedItems: skippedCount,
       errorCount,
       warningCount,
       healthScore,

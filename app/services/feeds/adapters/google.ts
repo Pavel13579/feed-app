@@ -82,12 +82,10 @@ export const googleAdapter: FeedAdapter = {
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
     const exponent = getCurrencyExponentForGoogle(currencyCode);
     const items: GoogleItem[] = [];
-    let skippedCount = 0;
     let invalidPriceCount = 0;
 
     for (const product of products) {
       if (product.status && product.status.toUpperCase() !== "ACTIVE") {
-        skippedCount += product.variants.length;
         continue;
       }
       const mainImageUrl = product.images?.[0]?.url;
@@ -95,17 +93,20 @@ export const googleAdapter: FeedAdapter = {
       for (const variant of product.variants) {
         const variantId = variant.shopifyId;
 
-        if (variant.priceMinor === null || variant.priceMinor <= 0) {
+        const hasPriceError = variant.priceMinor === null || variant.priceMinor <= 0;
+        const hasImageError = !mainImageUrl;
+        const hasLinkError = !product.link;
+        const hasVariantIdError = !variantId;
+
+        if (hasPriceError) {
           invalidPriceCount++;
+        }
+
+        if (hasPriceError || hasImageError || hasLinkError || hasVariantIdError) {
           continue;
         }
 
-        if (!variantId || !mainImageUrl || !product.link) {
-          skippedCount++;
-          continue;
-        }
-
-        const formattedPrice = `${formatMinor(variant.priceMinor, exponent)} ${currencyCode}`;
+        const formattedPrice = `${formatMinor(variant.priceMinor!, exponent)} ${currencyCode}`;
         const formattedSalePrice = variant.salePriceMinor !== null
           ? `${formatMinor(variant.salePriceMinor, exponent)} ${currencyCode}`
           : null;
@@ -194,7 +195,7 @@ export const googleAdapter: FeedAdapter = {
     return {
       xml,
       itemCount: items.length,
-      skippedCount,
+      skippedCount: 0, 
       invalidPriceCount,
     };
   }
