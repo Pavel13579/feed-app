@@ -14,6 +14,7 @@ import {
   Button,
   Box,
   InlineStack,
+  Link,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
@@ -21,6 +22,14 @@ import { googleAdapter, googleRuleMeta } from "app/services/feeds/adapters/googl
 
 const HEALTH_THRESHOLD_SUCCESS = 90;
 const HEALTH_THRESHOLD_WARNING = 70;
+
+
+type RawIssueGroup = {
+  code: string;
+  severity: string;
+  issue_count: bigint;
+  product_count: bigint;
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -49,19 +58,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where: { shopId: shop.id, status: "ACTIVE" },
   });
 
-  const rawIssues = await db.feedIssue.groupBy({
-    by: ["code", "severity"],
-    where: { feedId: feed.id },
-    _count: {
-      _all: true,
-    },
-  });
+  const rawIssues = await db.$queryRaw<RawIssueGroup[]>`
+    SELECT "code", "severity",
+           COUNT(*) AS issue_count,
+           COUNT(DISTINCT "productId") AS product_count
+    FROM "FeedIssue"
+    WHERE "feedId" = ${feed.id}
+    GROUP BY "code", "severity"
+  `;
 
-  const issues = rawIssues.map((item) => ({
-    code: item.code,
-    severity: item.severity,
-    count: item._count._all,
-  }));
+  const issues = rawIssues
+    .map((item) => ({
+      code: item.code,
+      severity: item.severity,
+      count: Number(item.issue_count),
+      productCount: Number(item.product_count),
+    }))
+    .sort((a, b) => {
+      if (a.severity === "error" && b.severity !== "error") return -1;
+      if (a.severity !== "error" && b.severity === "error") return 1;
+      return b.productCount - a.productCount;
+    });
 
   return json({ feed, issues, productCount });
 };
@@ -194,7 +211,7 @@ export default function FeedHealthPage() {
                   { title: "Code" },
                   { title: "Title & Description" },
                   { title: "Severity" },
-                  { title: "Affected Items" },
+                  { title: "Affected Products" },
                   { title: "How to fix" },
                 ]}
                 selectable={false}
@@ -208,9 +225,11 @@ export default function FeedHealthPage() {
                   return (
                     <IndexTable.Row id={issue.code} key={issue.code} position={index}>
                       <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd" fontWeight="bold">
-                          {issue.code}
-                        </Text>
+                        <Link url={`/app/feed/health/${issue.code}`} removeUnderline>
+                          <Text as="span" variant="bodyMd" fontWeight="bold">
+                            {issue.code}
+                          </Text>
+                        </Link>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodyMd">
@@ -223,7 +242,12 @@ export default function FeedHealthPage() {
                         </Badge>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
-                        <Badge tone="info">{issue.count.toString()}</Badge>
+                        <InlineStack gap="150" blockAlign="center">
+                          <Badge tone="info">{issue.productCount.toString()}</Badge>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`${issue.count} variant ${issue.count === 1 ? "row" : "rows"}`}
+                          </Text>
+                        </InlineStack>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm" tone="subdued">

@@ -20,3 +20,11 @@ export function getAdapter(channel: string): FeedAdapter {
 export function getChannelCategories(channel: string): ChannelCategory[] {
   return getAdapter(channel).categories;
 }
+
+export function getIssueCodes(channel: string): string[] {
+  return getAdapter(channel).rules.map((rule) => rule.code);
+}
+
+export function isKnownIssueCode(channel: string, code: string): boolean {
+  return getAdapter(channel).rules.some((rule) => rule.code === code);
+}

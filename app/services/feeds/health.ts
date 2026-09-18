@@ -20,7 +20,7 @@ export function checkProducts(
           issues.push({
             code: rule.code,
             severity: rule.severity,
-            productId: product.shopifyId,
+            productId: product.id,
             variantId: variant.shopifyId,
             message: typeof result === "string" ? result : undefined,
           });
