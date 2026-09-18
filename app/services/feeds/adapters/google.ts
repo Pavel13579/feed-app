@@ -228,3 +228,42 @@ function wrapInCData(html: string): string {
 function getCurrencyExponentForGoogle(currencyCode: string): number {
   return currencyCode.toUpperCase() === "HUF" ? 0 : 2;
 }
+
+export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
+  MISSING_IMAGE: {
+    title: "Missing product image",
+    hint: "Upload at least one main product image in your Shopify admin.",
+  },
+  MISSING_LINK: {
+    title: "Missing product link",
+    hint: "Ensure the product has a valid SEO handle and is published.",
+  },
+  PRICE_ZERO: {
+    title: "Invalid or zero price",
+    hint: "Set a price greater than 0 for all product variants.",
+  },
+  MISSING_VARIANT_ID: {
+    title: "Missing variant ID",
+    hint: "Ensure the product variant is properly synced from Shopify.",
+  },
+  INVALID_GTIN: {
+    title: "Invalid GTIN / Barcode",
+    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
+  },
+  NO_CATEGORY: {
+    title: "Missing Google Product Category",
+    hint: "Assign an official Google product category to this product.",
+  },
+  NO_BRAND: {
+    title: "Missing brand (vendor)",
+    hint: "Fill in the vendor/brand field for the product in Shopify.",
+  },
+  TITLE_TOO_LONG: {
+    title: "Title exceeds 150 characters",
+    hint: "Shorten the product title to comply with Google Shopping guidelines.",
+  },
+  EMPTY_DESCRIPTION: {
+    title: "Empty product description",
+    hint: "Add a description or rich text content to describe the product.",
+  },
+};
