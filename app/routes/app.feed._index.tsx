@@ -65,7 +65,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       message: "Feed successfully updated", 
       feed: {
         itemCount: updatedFeed.itemCount,
-        skippedItems: updatedFeed.skippedItems,
+        errorCount: updatedFeed.errorCount,
+        warningCount: updatedFeed.warningCount,
+        healthScore: updatedFeed.healthScore,
         lastGeneratedAt: updatedFeed.lastGeneratedAt,
         sizeKb: xmlSizeKb,
         preview: updatedFeed.content ? updatedFeed.content.substring(0, 500) + "..." : ""
@@ -134,7 +136,13 @@ export default function FeedPage() {
                       <strong>Items (variants) processed:</strong> <Badge tone="info">{actionData.feed.itemCount.toString()}</Badge>
                     </List.Item>
                     <List.Item>
-                      <strong>Items skipped:</strong> <Badge tone={actionData.feed.skippedItems > 0 ? "warning" : "success"}>{actionData.feed.skippedItems.toString()}</Badge>
+                      <strong>Errors:</strong> <Badge tone={actionData.feed.errorCount > 0 ? "critical" : "success"}>{actionData.feed.errorCount.toString()}</Badge>
+                    </List.Item>
+                    <List.Item>
+                      <strong>Warnings:</strong> <Badge tone={actionData.feed.warningCount > 0 ? "warning" : "success"}>{actionData.feed.warningCount.toString()}</Badge>
+                    </List.Item>
+                    <List.Item>
+                      <strong>Health Score:</strong> <Badge tone={actionData.feed.healthScore < 50 ? "critical" : actionData.feed.healthScore < 80 ? "warning" : "success"}>{`${actionData.feed.healthScore}%`}</Badge>
                     </List.Item>
                     <List.Item>
                       <strong>XML Size:</strong> {actionData.feed.sizeKb} KB

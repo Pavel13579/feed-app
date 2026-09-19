@@ -28,6 +28,7 @@ export default function App() {
         <Link to="/app/products">Products list page</Link>
         <Link to="/app/feed">Feed Generation</Link>
         <Link to="/app/feed/settings">Feed Settings</Link>
+        <Link to="/app/feed/health">Feed Health</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

@@ -16,6 +16,7 @@ database.sqlite
 erd.png
 /app/testxml
 feed.xml
+google_feed_rules.xlsx
 
 /extensions/*/dist
 

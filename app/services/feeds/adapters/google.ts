@@ -1,13 +1,13 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult } from "../types";
+import { FeedAdapter, FeedRenderResult, FeedRule } from "../types";
 import { googleCategories } from "./google-categories";
-import { formatMinor, getCurrencyExponent } from "app/utils/money";
+import { formatMinor } from "app/utils/money";
 
 interface GoogleItem {
-  id: string;                     
+  id: string;                 
   item_group_id: string;          
   title: string;                 
-  description: string;           
+  description: string;          
   link: string;                  
   image_link: string;            
   availability: "in_stock" | "out_of_stock"; 
@@ -22,90 +22,124 @@ interface GoogleItem {
   product_type: string | null;
 }
 
-export function mapProductsToGoogleItems(
-  products: NormalizedProduct[], 
-  currencyCode: string, 
-  exponent: number
-): { items: GoogleItem[]; skippedCount: number; invalidPriceCount: number } {
-  const items: GoogleItem[] = [];
-  let skippedCount = 0;
-  let invalidPriceCount = 0;
-
-  for (const product of products) {
-    if (product.status && product.status.toUpperCase() !== "ACTIVE") {
-      skippedCount += product.variants.length;
-      continue;
-    }
-    const mainImageUrl = product.images?.[0]?.url;
-
-    for (const variant of product.variants) {
-      const variantId = variant.shopifyId;
-
-      if (variant.priceMinor === null) {
-        invalidPriceCount++;
-        continue;
-      }
-
-      if (!variantId || !mainImageUrl || !product.link || !currencyCode) {
-        skippedCount++;
-        continue;
-      }
-
-      const formattedPrice = `${formatMinor(variant.priceMinor, exponent)} ${currencyCode}`;
-      const formattedSalePrice = variant.salePriceMinor !== null
-        ? `${formatMinor(variant.salePriceMinor, exponent)} ${currencyCode}`
-        : null;
-
-      const rawGtin = variant.barcode?.trim() || null;
-      const gtin = isValidGtin(rawGtin) ? rawGtin : null; 
-      const mpn = variant.sku?.trim() || null;
-      const brand = product.vendor?.trim() || null;
-      
-      const hasUniqueIdentifier = !!(gtin || mpn);
-      const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
-
-      const itemLink = `${product.link}?variant=${variantId}`;
-
-      const googleItem: GoogleItem = {
-        id: variant.shopifyId,    
-        item_group_id: product.shopifyId,
-        title: product.title,
-        description: product.descriptionHtml || product.title, 
-        link: itemLink,
-        image_link: mainImageUrl,
-        availability: variant.isAvailable ? "in_stock" : "out_of_stock",
-        price: formattedPrice,
-        sale_price: formattedSalePrice,
-        condition: "new",
-        brand: brand,
-        gtin: gtin,
-        mpn: mpn,
-        identifier_exists: identifierExists,
-        google_product_category: product.category,
-        product_type: product.productType,
-      };
-
-      items.push(googleItem);
-    }
-  }
-
-  return { items, skippedCount, invalidPriceCount };
-}
-
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
   categories: googleCategories,
   
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
-    const exponent = getCurrencyExponent(currencyCode);
-    const { items, skippedCount, invalidPriceCount } = mapProductsToGoogleItems(products, currencyCode, exponent);
+  rules: [
+    {
+      code: "MISSING_IMAGE",
+      severity: "error",
+      check: (product) => !product.images?.[0]?.url,
+    },
+    {
+      code: "MISSING_LINK",
+      severity: "error",
+      check: (product) => !product.link,
+    },
+    {
+      code: "PRICE_ZERO",
+      severity: "error",
+      check: (_, variant) => variant.priceMinor === null || variant.priceMinor <= 0,
+    },
+    {
+      code: "MISSING_VARIANT_ID",
+      severity: "error",
+      check: (_, variant) => !variant.shopifyId,
+    },
+    {
+      code: "INVALID_GTIN",
+      severity: "warning",
+      check: (_, variant) => {
+        const rawGtin = variant.barcode?.trim();
+        if (!rawGtin) return false;
+        return !isValidGtin(rawGtin);
+      },
+    },
+    {
+      code: "NO_CATEGORY",
+      severity: "warning",
+      check: (product) => !product.category,
+    },
+    {
+      code: "NO_BRAND",
+      severity: "warning",
+      check: (product) => !product.vendor?.trim(),
+    },
+    {
+      code: "TITLE_TOO_LONG",
+      severity: "warning",
+      check: (product) => Boolean(product.title && product.title.length > 150),
+    },
+    {
+      code: "EMPTY_DESCRIPTION",
+      severity: "warning",
+      check: (product) => !product.descriptionHtml && !product.title,
+    },
+  ],
 
-    if (skippedCount > 0) {
-      console.warn(`Google Adapter: skipped ${skippedCount} invalid items.`);
-    }
-    if (invalidPriceCount > 0) {
-      console.warn(`Google Adapter: ${invalidPriceCount} item(s) had no valid price after Price settings.`);
+  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
+    const exponent = getCurrencyExponentForGoogle(currencyCode);
+    const items: GoogleItem[] = [];
+    let invalidPriceCount = 0;
+
+    for (const product of products) {
+      if (product.status && product.status.toUpperCase() !== "ACTIVE") {
+        continue;
+      }
+      const mainImageUrl = product.images?.[0]?.url;
+
+      for (const variant of product.variants) {
+        const variantId = variant.shopifyId;
+
+        const hasPriceError = variant.priceMinor === null || variant.priceMinor <= 0;
+        const hasImageError = !mainImageUrl;
+        const hasLinkError = !product.link;
+        const hasVariantIdError = !variantId;
+
+        if (hasPriceError) {
+          invalidPriceCount++;
+        }
+
+        if (hasPriceError || hasImageError || hasLinkError || hasVariantIdError) {
+          continue;
+        }
+
+        const formattedPrice = `${formatMinor(variant.priceMinor!, exponent)} ${currencyCode}`;
+        const formattedSalePrice = variant.salePriceMinor !== null
+          ? `${formatMinor(variant.salePriceMinor, exponent)} ${currencyCode}`
+          : null;
+
+        const rawGtin = variant.barcode?.trim() || null;
+        const gtin = isValidGtin(rawGtin) ? rawGtin : null; 
+        const mpn = variant.sku?.trim() || null;
+        const brand = product.vendor?.trim() || null;
+        
+        const hasUniqueIdentifier = !!(gtin || mpn);
+        const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
+
+        const itemLink = `${product.link}?variant=${variantId}`;
+
+        items.push({
+          id: variant.shopifyId,    
+          item_group_id: product.shopifyId,
+          title: product.title,
+          description: product.descriptionHtml || product.title, 
+          link: itemLink,
+          image_link: mainImageUrl,
+          availability: variant.isAvailable ? "in_stock" : "out_of_stock",
+          price: formattedPrice,
+          sale_price: formattedSalePrice,
+          condition: "new",
+          brand: brand,
+          gtin: gtin,
+          mpn: mpn,
+          identifier_exists: identifierExists,
+          google_product_category: product.category,
+          product_type: product.productType,
+        });
+      }
     }
 
     const xmlItems = items.map((item) => {
@@ -161,7 +195,7 @@ export const googleAdapter: FeedAdapter = {
     return {
       xml,
       itemCount: items.length,
-      skippedCount,
+      skippedCount: 0, 
       invalidPriceCount,
     };
   }
@@ -190,3 +224,46 @@ function wrapInCData(html: string): string {
   const cleanHtml = html.replace(/]]>/g, ']]]]><![CDATA[>');
   return `<![CDATA[${cleanHtml}]]>`;
 }
+
+function getCurrencyExponentForGoogle(currencyCode: string): number {
+  return currencyCode.toUpperCase() === "HUF" ? 0 : 2;
+}
+
+export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
+  MISSING_IMAGE: {
+    title: "Missing product image",
+    hint: "Upload at least one main product image in your Shopify admin.",
+  },
+  MISSING_LINK: {
+    title: "Missing product link",
+    hint: "Ensure the product has a valid SEO handle and is published.",
+  },
+  PRICE_ZERO: {
+    title: "Invalid or zero price",
+    hint: "Set a price greater than 0 for all product variants.",
+  },
+  MISSING_VARIANT_ID: {
+    title: "Missing variant ID",
+    hint: "Ensure the product variant is properly synced from Shopify.",
+  },
+  INVALID_GTIN: {
+    title: "Invalid GTIN / Barcode",
+    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
+  },
+  NO_CATEGORY: {
+    title: "Missing Google Product Category",
+    hint: "Assign an official Google product category to this product.",
+  },
+  NO_BRAND: {
+    title: "Missing brand (vendor)",
+    hint: "Fill in the vendor/brand field for the product in Shopify.",
+  },
+  TITLE_TOO_LONG: {
+    title: "Title exceeds 150 characters",
+    hint: "Shorten the product title to comply with Google Shopping guidelines.",
+  },
+  EMPTY_DESCRIPTION: {
+    title: "Empty product description",
+    hint: "Add a description or rich text content to describe the product.",
+  },
+};
