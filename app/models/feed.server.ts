@@ -1,6 +1,7 @@
 import { dbProductToNormalized } from "./normalizer.server";
 import db from "../db.server";
-import { getAdapter } from "app/services/feeds/registry";
+import { findAdapter, getAdapter } from "app/services/feeds/registry";
+import { FEED_NAME_MAX_LENGTH } from "app/services/feeds/constants";
 import { getFeedSettings } from "app/services/feeds/settings";
 import { getCurrencyExponent } from "app/utils/money";
 import { checkProducts } from "app/services/feeds/health";
@@ -128,28 +129,28 @@ export async function generateFeed(feedId: string) {
   }
 }
 
-export async function ensureShopAndFeed(shopDomain: string, channel: string, defaultName: string) {
-  let shop = await db.shop.findUnique({ where: { shopDomain } });
-  if (!shop) {
-    shop = await db.shop.create({ data: { shopDomain } });
+export async function createFeed(params: { shopDomain: string; channel: string; name?: string | null }) {
+  const adapter = findAdapter(params.channel);
+  if (!adapter) {
+    throw new Error(`Unsupported feed channel: "${params.channel}"`);
   }
 
-  let feed = await db.feed.findFirst({
-    where: { shopId: shop.id, channel },
+  const name = params.name?.trim() || adapter.descriptor.defaultFeedName;
+
+  const shop = await db.shop.upsert({
+    where: { shopDomain: params.shopDomain },
+    update: {},
+    create: { shopDomain: params.shopDomain },
   });
 
-  if (!feed) {
-    feed = await db.feed.create({
-      data: {
-        shopId: shop.id,
-        channel,
-        name: defaultName,
-        token: crypto.randomUUID(),
-        content: "",
-        itemCount: 0,
-      },
-    });
-  }
-
-  return { shop, feed };
+  return db.feed.create({
+    data: {
+      shopId: shop.id,
+      channel: adapter.channel,
+      name: name.slice(0, FEED_NAME_MAX_LENGTH),
+      token: crypto.randomUUID(),
+      content: "",
+      itemCount: 0,
+    },
+  });
 }

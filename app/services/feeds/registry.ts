@@ -28,3 +28,11 @@ export function getIssueCodes(channel: string): string[] {
 export function isKnownIssueCode(channel: string, code: string): boolean {
   return getAdapter(channel).rules.some((rule) => rule.code === code);
 }
+
+export function listAdapters(): FeedAdapter[] {
+  return Object.values(adaptersRegistry);
+}
+
+export function findAdapter(channel: string): FeedAdapter | undefined {
+  return adaptersRegistry[channel];
+}

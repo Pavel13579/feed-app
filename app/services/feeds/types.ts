@@ -31,8 +31,10 @@ export interface ChannelCategory {
 export interface FeedAdapter {
   channel: string;
   filename: string;
+  descriptor: ChannelDescriptor;    
   categories: ChannelCategory[];
   rules: FeedRule[];
+  ruleMeta: Record<string, RuleMeta>;
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult;
 }
 
@@ -48,3 +50,22 @@ export type FeedSummary = {
   warningCount: number;
   groups: FeedIssueGroup[];
 };
+
+
+export interface RuleMeta {
+  title: string;
+  hint: string;
+}
+
+
+export interface ChannelDescriptor {
+  label: string;              
+  defaultFeedName: string;        
+  submitTo: string;                 
+  categoryLabel: string;         
+  categoryHint: string;             
+  customCategoryPlaceholder: string;
+  rebuildHint: string;              
+  healthSubtitle: string;
+  healthyMessage: string;      
+}

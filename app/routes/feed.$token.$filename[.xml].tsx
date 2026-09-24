@@ -1,24 +1,24 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import db from "../db.server";
-import { getAdapter } from "app/services/feeds/registry";
+import { findAdapter } from "app/services/feeds/registry";
 
 export async function loader({ params }: LoaderFunctionArgs) {
   const { token, filename } = params;
 
-  if (!filename) {
-    return new Response("Feed channel not found", { status: 404 });
+  if (!token || !filename) {
+    return new Response("Not found", { status: 404 });
   }
-
-  const adapter = getAdapter(filename);
-  if (!adapter) {
-    return new Response("Feed channel not found", { status: 404 });
-  }
-
-  const feed = await db.feed.findUnique({ 
-    where: { token } 
+  const feed = await db.feed.findUnique({
+    where: { token },
+    select: { channel: true, content: true },
   });
 
   if (!feed) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const adapter = findAdapter(feed.channel);
+  if (!adapter || adapter.filename !== `${filename}.xml`) {
     return new Response("Not found", { status: 404 });
   }
 

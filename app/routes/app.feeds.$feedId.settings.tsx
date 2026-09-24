@@ -32,7 +32,7 @@ import {
   type PriceMode,
   type PriceAdjustmentType,
 } from "app/services/feeds/settings";
-import { ensureShopAndFeed } from "app/models/feed.server";
+import { authenticateFeedRequest } from "app/models/feedAccess.server";
 
 const CHANNEL = googleAdapter.channel;
 
@@ -95,29 +95,16 @@ function priceFormStateToSettings(form: PriceFormState): PriceSettings {
   };
 }
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
 
-  const shop = await db.shop.findUnique({ where: { shopDomain } });
-
-  const feed = shop
-    ? await db.feed.findFirst({ where: { shopId: shop.id, channel: CHANNEL } })
-    : null;
-
-  const feedSettings = getFeedSettings(feed?.settings ?? null);
-  const channelCategories = getChannelCategories(CHANNEL);
-
-  const totalProductCount = shop ? await db.product.count({ where: { shopId: shop.id } }) : 0;
-
-  const productTypeCounts = shop
-    ? await db.product.groupBy({
-        by: ["productType"],
-        where: { shopId: shop.id },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-      })
-    : [];
+  const feedSettings = getFeedSettings(feed.settings);
+  const channelCategories = adapter.categories;
+  const totalProductCount = await db.product.count({ where: { shopId: shop.id } });
+  const productTypeCounts = await db.product.groupBy({
+    by: ["productType"], where: { shopId: shop.id },
+    _count: { id: true }, orderBy: { _count: { id: "desc" } },
+  });
 
   const savedByType = new Map(feedSettings.categoryMapping.map((row) => [row.productType, row]));
   const dbTypes = new Set<string>();
@@ -150,23 +137,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const productsWithoutType = totalProductCount - typedProductCount;
 
   return json({
-    rows,
-    channelCategories,
-    totalProductCount,
-    productsWithoutType,
+    feed: { id: feed.id, name: feed.name },
+    channel: adapter.descriptor,
+    rows, channelCategories, totalProductCount, productsWithoutType,
     price: feedSettings.price,
   });
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  const { feed } = await ensureShopAndFeed(
-    shopDomain, 
-    googleAdapter.channel, 
-    "Google Shopping Feed"
-  );
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { feed } = await authenticateFeedRequest(request, params.feedId);
 
   const formData = await request.formData();
 
@@ -228,13 +207,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function FeedSettingsPage() {
-  const {
-    rows: initialRows,
-    channelCategories,
-    totalProductCount,
-    productsWithoutType,
-    price: initialPrice,
-  } = useLoaderData<typeof loader>();
+  const { feed, channel, rows: initialRows, channelCategories, totalProductCount,
+        productsWithoutType, price: initialPrice } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -282,7 +256,9 @@ export default function FeedSettingsPage() {
   const showAdjustmentFields = priceForm.mode === "web_plus" || priceForm.mode === "web_minus";
 
   return (
-    <Page title="Feed Settings" backAction={{ content: "Back", url: "/app/feed" }}>
+    <Page title="Feed Settings"
+      subtitle={`${feed.name} · ${channel.label}`}
+      backAction={{ content: feed.name, url: `/app/feeds/${feed.id}` }}>
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">

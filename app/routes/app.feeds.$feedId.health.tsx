@@ -16,13 +16,11 @@ import {
   InlineStack,
   Link,
 } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { googleAdapter, googleRuleMeta } from "app/services/feeds/adapters/google";
+import { authenticateFeedRequest } from "app/models/feedAccess.server";
 
 const HEALTH_THRESHOLD_SUCCESS = 90;
 const HEALTH_THRESHOLD_WARNING = 70;
-
 
 type RawIssueGroup = {
   code: string;
@@ -31,28 +29,8 @@ type RawIssueGroup = {
   product_count: bigint;
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  const shop = await db.shop.findUnique({
-    where: { shopDomain },
-  });
-
-  if (!shop) {
-    return json({ feed: null, issues: [], productCount: 0 });
-  }
-
-  const feed = await db.feed.findFirst({
-    where: {
-      shopId: shop.id,
-      channel: googleAdapter.channel,
-    },
-  });
-
-  if (!feed) {
-    return json({ feed: null, issues: [], productCount: 0 });
-  }
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
 
   const productCount = await db.product.count({
     where: { shopId: shop.id, status: "ACTIVE" },
@@ -80,11 +58,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return b.productCount - a.productCount;
     });
 
-  return json({ feed, issues, productCount });
+  return json({
+    feed: {
+      id: feed.id,
+      name: feed.name,
+      healthScore: feed.healthScore,
+      errorCount: feed.errorCount,
+      warningCount: feed.warningCount,
+      itemCount: feed.itemCount,
+      lastGeneratedAt: feed.lastGeneratedAt,
+    },
+    channel: adapter.descriptor,
+    ruleMeta: adapter.ruleMeta,
+    issues,
+    productCount,
+  });
 };
 
 export default function FeedHealthPage() {
-  const { feed, issues, productCount } = useLoaderData<typeof loader>();
+  const { feed, channel, ruleMeta, issues, productCount } = useLoaderData<typeof loader>();
 
   const getHealthBadgeTone = (score: number) => {
     if (score >= HEALTH_THRESHOLD_SUCCESS) return "success";
@@ -92,9 +84,9 @@ export default function FeedHealthPage() {
     return "critical";
   };
 
-  if (!feed || !feed.lastGeneratedAt) {
+  if (!feed.lastGeneratedAt) {
     return (
-      <Page title="Feed Health" backAction={{ content: "Back", url: "/app" }}>
+      <Page title="Feed Health" backAction={{ content: feed.name, url: `/app/feeds/${feed.id}` }}>
         <Layout>
           <Layout.Section>
             <Card>
@@ -103,7 +95,7 @@ export default function FeedHealthPage() {
                   <p>Generate your product feed first to see health metrics and detected issues.</p>
                 </Banner>
                 <Box paddingBlockStart="200">
-                  <Button variant="primary" url="/app/feed">
+                  <Button variant="primary" url={`/app/feeds/${feed.id}`}>
                     Go to Feed Generation
                   </Button>
                 </Box>
@@ -117,7 +109,7 @@ export default function FeedHealthPage() {
 
   if (productCount === 0) {
     return (
-      <Page title="Feed Health" backAction={{ content: "Back", url: "/app" }}>
+      <Page title="Feed Health" backAction={{ content: feed.name, url: `/app/feeds/${feed.id}` }}>
         <Layout>
           <Layout.Section>
             <Card>
@@ -141,10 +133,10 @@ export default function FeedHealthPage() {
   return (
     <Page
       title="Feed Health"
-      subtitle="Google Merchant Center catalog diagnostics"
-      backAction={{ content: "Back", url: "/app" }}
+      subtitle={`${feed.name} · ${channel.healthSubtitle}`}
+      backAction={{ content: feed.name, url: `/app/feeds/${feed.id}` }}
       secondaryActions={[
-        { content: "Generate Feed", url: "/app/feed" },
+        { content: "Generate Feed", url: `/app/feeds/${feed.id}` },
       ]}
     >
       <Layout>
@@ -156,7 +148,7 @@ export default function FeedHealthPage() {
                   Overall Health Score
                 </Text>
                 <Badge tone={getHealthBadgeTone(healthScore)}>
-                    {`${healthScore}%`}
+                  {`${healthScore}%`}
                 </Badge>
               </InlineStack>
 
@@ -191,7 +183,7 @@ export default function FeedHealthPage() {
             <Card>
               <BlockStack gap="400" align="center">
                 <Banner tone="success" title="Everything is clean!">
-                  <p>No errors or warnings found in your product feed. Your catalog is fully optimized for Google Shopping.</p>
+                  <p>{channel.healthyMessage}</p>
                 </Banner>
               </BlockStack>
             </Card>
@@ -217,7 +209,7 @@ export default function FeedHealthPage() {
                 selectable={false}
               >
                 {issues.map((issue, index) => {
-                  const meta = googleRuleMeta[issue.code] || {
+                  const meta = ruleMeta[issue.code] || {
                     title: issue.code,
                     hint: "Review product attributes.",
                   };
@@ -225,7 +217,7 @@ export default function FeedHealthPage() {
                   return (
                     <IndexTable.Row id={issue.code} key={issue.code} position={index}>
                       <IndexTable.Cell>
-                        <Link url={`/app/feed/health/${issue.code}`} removeUnderline>
+                        <Link url={`/app/feeds/${feed.id}/health/${issue.code}`} removeUnderline>
                           <Text as="span" variant="bodyMd" fontWeight="bold">
                             {issue.code}
                           </Text>

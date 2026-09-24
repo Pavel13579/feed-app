@@ -22,10 +22,64 @@ interface GoogleItem {
   product_type: string | null;
 }
 
+export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
+  MISSING_IMAGE: {
+    title: "Missing product image",
+    hint: "Upload at least one main product image in your Shopify admin.",
+  },
+  MISSING_LINK: {
+    title: "Missing product link",
+    hint: "Ensure the product has a valid SEO handle and is published.",
+  },
+  PRICE_ZERO: {
+    title: "Invalid or zero price",
+    hint: "Set a price greater than 0 for all product variants.",
+  },
+  MISSING_VARIANT_ID: {
+    title: "Missing variant ID",
+    hint: "Ensure the product variant is properly synced from Shopify.",
+  },
+  INVALID_GTIN: {
+    title: "Invalid GTIN / Barcode",
+    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
+  },
+  NO_CATEGORY: {
+    title: "Missing Google Product Category",
+    hint: "Assign an official Google product category to this product.",
+  },
+  NO_BRAND: {
+    title: "Missing brand (vendor)",
+    hint: "Fill in the vendor/brand field for the product in Shopify.",
+  },
+  TITLE_TOO_LONG: {
+    title: "Title exceeds 150 characters",
+    hint: "Shorten the product title to comply with Google Shopping guidelines.",
+  },
+  EMPTY_DESCRIPTION: {
+    title: "Empty product description",
+    hint: "Add a description or rich text content to describe the product.",
+  },
+};
+
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
+  descriptor: {
+    label: "Google Shopping",
+    defaultFeedName: "Google Shopping Feed",
+    submitTo: "Google Merchant Center",
+    categoryLabel: "Google category",
+    categoryHint:
+      "Map each of your product types to a Google product category. Unmapped product types are sent without g:google_product_category.",
+    customCategoryPlaceholder: "Apparel & Accessories > Clothing > Shirts & Tops",
+    rebuildHint:
+      "This will compile all active variants and map them into standard Google Merchant Center format.",
+    healthSubtitle: "Google Merchant Center catalog diagnostics",
+    healthyMessage:
+      "No errors or warnings found in your product feed. Your catalog is fully optimized for Google Shopping.",
+  },
   categories: googleCategories,
+  ruleMeta: googleRuleMeta,
   
   rules: [
     {
@@ -229,41 +283,3 @@ function getCurrencyExponentForGoogle(currencyCode: string): number {
   return currencyCode.toUpperCase() === "HUF" ? 0 : 2;
 }
 
-export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
-  MISSING_IMAGE: {
-    title: "Missing product image",
-    hint: "Upload at least one main product image in your Shopify admin.",
-  },
-  MISSING_LINK: {
-    title: "Missing product link",
-    hint: "Ensure the product has a valid SEO handle and is published.",
-  },
-  PRICE_ZERO: {
-    title: "Invalid or zero price",
-    hint: "Set a price greater than 0 for all product variants.",
-  },
-  MISSING_VARIANT_ID: {
-    title: "Missing variant ID",
-    hint: "Ensure the product variant is properly synced from Shopify.",
-  },
-  INVALID_GTIN: {
-    title: "Invalid GTIN / Barcode",
-    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
-  },
-  NO_CATEGORY: {
-    title: "Missing Google Product Category",
-    hint: "Assign an official Google product category to this product.",
-  },
-  NO_BRAND: {
-    title: "Missing brand (vendor)",
-    hint: "Fill in the vendor/brand field for the product in Shopify.",
-  },
-  TITLE_TOO_LONG: {
-    title: "Title exceeds 150 characters",
-    hint: "Shorten the product title to comply with Google Shopping guidelines.",
-  },
-  EMPTY_DESCRIPTION: {
-    title: "Empty product description",
-    hint: "Add a description or rich text content to describe the product.",
-  },
-};
