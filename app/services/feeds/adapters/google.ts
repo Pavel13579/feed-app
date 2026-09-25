@@ -1,6 +1,7 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult, FeedRule } from "../types";
 import { formatMinor } from "app/utils/money";
+import { escapeXml, cdata as wrapInCData } from "../xml";
 
 interface GoogleItem {
   id: string;                 
@@ -255,18 +256,7 @@ export const googleAdapter: FeedAdapter = {
   }
 };
 
-function escapeXml(unsafe: string): string {
-  return unsafe.replace(/[<>&'"]/g, (char) => {
-    switch (char) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '&': return '&amp;';
-      case '"': return '&quot;';
-      case "'": return '&apos;';
-      default: return char;
-    }
-  });
-}
+
 
 function isValidGtin(gtin: string | null | undefined): boolean {
   if (!gtin) return false;
@@ -274,10 +264,6 @@ function isValidGtin(gtin: string | null | undefined): boolean {
   return /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(cleanGtin);
 }
 
-function wrapInCData(html: string): string {
-  const cleanHtml = html.replace(/]]>/g, ']]]]><![CDATA[>');
-  return `<![CDATA[${cleanHtml}]]>`;
-}
 
 function getCurrencyExponentForGoogle(currencyCode: string): number {
   return currencyCode.toUpperCase() === "HUF" ? 0 : 2;
