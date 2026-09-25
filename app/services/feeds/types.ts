@@ -24,16 +24,15 @@ export interface FeedRenderResult {
 }
 
 export interface ChannelCategory {
-  id: string;
+  id: string | null;
   path: string;
 }
 
 export interface FeedAdapter {
   channel: string;
   filename: string;
-  contentType: string;              
+  contentType: string;
   descriptor: ChannelDescriptor;
-  categories: ChannelCategory[];
   rules: FeedRule[];
   ruleMeta: Record<string, RuleMeta>;
   render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult;
@@ -60,13 +59,14 @@ export interface RuleMeta {
 
 
 export interface ChannelDescriptor {
-  label: string;              
-  defaultFeedName: string;        
-  submitTo: string;                 
-  categoryLabel: string;         
-  categoryHint: string;             
+  label: string;
+  defaultFeedName: string;
+  submitTo: string;
+  categoryLabel: string;
+  categoryHint: string;
   customCategoryPlaceholder: string;
-  rebuildHint: string;              
+  rebuildHint: string;
   healthSubtitle: string;
-  healthyMessage: string;      
+  healthyMessage: string;
+  taxonomy: string; 
 }

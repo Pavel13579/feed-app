@@ -1,6 +1,5 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
 import { FeedAdapter, FeedRenderResult, FeedRule } from "../types";
-import { googleCategories } from "./google-categories";
 import { formatMinor } from "app/utils/money";
 
 interface GoogleItem {
@@ -66,20 +65,20 @@ export const googleAdapter: FeedAdapter = {
   filename: "google.xml",
   contentType: "application/xml; charset=utf-8",
   descriptor: {
-    label: "Google Shopping",
-    defaultFeedName: "Google Shopping Feed",
-    submitTo: "Google Merchant Center",
-    categoryLabel: "Google category",
-    categoryHint:
-      "Map each of your product types to a Google product category. Unmapped product types are sent without g:google_product_category.",
-    customCategoryPlaceholder: "Apparel & Accessories > Clothing > Shirts & Tops",
-    rebuildHint:
-      "This will compile all active variants and map them into standard Google Merchant Center format.",
-    healthSubtitle: "Google Merchant Center catalog diagnostics",
-    healthyMessage:
-      "No errors or warnings found in your product feed. Your catalog is fully optimized for Google Shopping.",
-  },
-  categories: googleCategories,
+  label: "Google Shopping",
+  defaultFeedName: "Google Shopping Feed",
+  submitTo: "Google Merchant Center",
+  categoryLabel: "Google category",
+  categoryHint:
+    "Map each of your product types to a Google product category. Unmapped product types are sent without g:google_product_category.",
+  customCategoryPlaceholder: "Apparel & Accessories > Clothing > Shirts & Tops",
+  rebuildHint:
+    "This will compile all active variants and map them into standard Google Merchant Center format.",
+  healthSubtitle: "Google Merchant Center catalog diagnostics",
+  healthyMessage:
+    "No errors or warnings found in your product feed. Your catalog is fully optimized for Google Shopping.",
+  taxonomy: "google",                  // NEW
+},
   ruleMeta: googleRuleMeta,
   
   rules: [

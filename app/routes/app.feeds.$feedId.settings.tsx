@@ -19,10 +19,9 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
-import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { googleAdapter } from "app/services/feeds/adapters/google";
-import { getChannelCategories } from "app/services/feeds/registry";
+import { resolveStoredCategoryValue } from "app/services/feeds/taxonomy.server";
+import { CategoryCombobox } from "app/components/CategoryCombobox";
 import {
   getFeedSettings,
   isValidPriceSettings,
@@ -33,8 +32,6 @@ import {
   type PriceAdjustmentType,
 } from "app/services/feeds/settings";
 import { authenticateFeedRequest } from "app/models/feedAccess.server";
-
-const CHANNEL = googleAdapter.channel;
 
 interface CategoryRow extends CategoryMappingRow {
   productCount: number;
@@ -90,7 +87,7 @@ function priceFormStateToSettings(form: PriceFormState): PriceSettings {
   return {
     mode: form.mode,
     adjustmentType: form.adjustmentType,
-    adjustmentValue, 
+    adjustmentValue,
     taxPercent,
   };
 }
@@ -99,7 +96,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
 
   const feedSettings = getFeedSettings(feed.settings);
-  const channelCategories = adapter.categories;
+  const taxonomyKey = adapter.descriptor.taxonomy;
   const totalProductCount = await db.product.count({ where: { shopId: shop.id } });
   const productTypeCounts = await db.product.groupBy({
     by: ["productType"], where: { shopId: shop.id },
@@ -121,7 +118,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
     rows.push({
       productType: entry.productType,
-      category: saved?.category ?? null,
+      category: saved?.category ? resolveStoredCategoryValue(taxonomyKey, saved.category) : null,
       custom: saved?.custom ?? false,
       customValue: saved?.customValue ?? null,
       productCount: entry._count.id,
@@ -130,7 +127,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   for (const saved of feedSettings.categoryMapping) {
     if (!dbTypes.has(saved.productType)) {
-      rows.push({ ...saved, productCount: 0 });
+      rows.push({
+        ...saved,
+        category: saved.category ? resolveStoredCategoryValue(taxonomyKey, saved.category) : null,
+        productCount: 0,
+      });
     }
   }
 
@@ -139,7 +140,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return json({
     feed: { id: feed.id, name: feed.name },
     channel: adapter.descriptor,
-    rows, channelCategories, totalProductCount, productsWithoutType,
+    rows, taxonomyKey, totalProductCount, productsWithoutType,
     price: feedSettings.price,
   });
 };
@@ -207,7 +208,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 export default function FeedSettingsPage() {
-  const { feed, channel, rows: initialRows, channelCategories, totalProductCount,
+  const { feed, channel, rows: initialRows, taxonomyKey, totalProductCount,
         productsWithoutType, price: initialPrice } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -224,11 +225,6 @@ export default function FeedSettingsPage() {
   useEffect(() => {
     setPriceForm(priceSettingsToFormState(initialPrice));
   }, [initialPrice]);
-
-  const categoryOptions = [
-    { label: "Not selected", value: "" },
-    ...channelCategories.map((cat) => ({ label: cat.path, value: cat.path })),
-  ];
 
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -305,8 +301,7 @@ export default function FeedSettingsPage() {
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Map each of your product types to a Google product category. Unmapped
-                    product types are sent without g:google_product_category.
+                    {channel.categoryHint}
                   </Text>
                 </BlockStack>
 
@@ -335,12 +330,12 @@ export default function FeedSettingsPage() {
                     </InlineStack>
 
                     {!row.custom && (
-                      <Select
-                        label="Google category"
-                        labelHidden
-                        options={categoryOptions}
+                      <CategoryCombobox
+                        taxonomyKey={taxonomyKey}
                         value={row.category ?? ""}
-                        onChange={(value) => updateRow(index, { category: value || null })}
+                        onSelect={(path) => updateRow(index, { category: path })}
+                        label={channel.categoryLabel}
+                        placeholder="Search categories…"
                       />
                     )}
 
@@ -354,7 +349,7 @@ export default function FeedSettingsPage() {
                       <TextField
                         label="Custom category"
                         labelHidden
-                        placeholder="Apparel & Accessories > Clothing > Shirts & Tops"
+                        placeholder={channel.customCategoryPlaceholder}
                         value={row.customValue ?? ""}
                         onChange={(value) => updateRow(index, { customValue: value })}
                         autoComplete="off"
