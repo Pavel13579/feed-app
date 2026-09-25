@@ -31,7 +31,8 @@ export interface ChannelCategory {
 export interface FeedAdapter {
   channel: string;
   filename: string;
-  descriptor: ChannelDescriptor;    
+  contentType: string;              
+  descriptor: ChannelDescriptor;
   categories: ChannelCategory[];
   rules: FeedRule[];
   ruleMeta: Record<string, RuleMeta>;

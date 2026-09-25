@@ -8,6 +8,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
   if (!token || !filename) {
     return new Response("Not found", { status: 404 });
   }
+
   const feed = await db.feed.findUnique({
     where: { token },
     select: { channel: true, content: true },
@@ -18,17 +19,17 @@ export async function loader({ params }: LoaderFunctionArgs) {
   }
 
   const adapter = findAdapter(feed.channel);
-  if (!adapter || adapter.filename !== `${filename}.xml`) {
+  if (!adapter || filename !== adapter.filename) {
     return new Response("Not found", { status: 404 });
   }
 
   if (!feed.content) {
-    return new Response("Feed not generated yet", { status: 404 });
+    return new Response("Not found", { status: 404 });
   }
 
   return new Response(feed.content, {
     headers: {
-      "Content-Type": "application/xml; charset=utf-8",
+      "Content-Type": adapter.contentType,
       "Cache-Control": "public, max-age=3600",
     },
   });

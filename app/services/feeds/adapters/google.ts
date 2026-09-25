@@ -64,6 +64,7 @@ export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
+  contentType: "application/xml; charset=utf-8",
   descriptor: {
     label: "Google Shopping",
     defaultFeedName: "Google Shopping Feed",
