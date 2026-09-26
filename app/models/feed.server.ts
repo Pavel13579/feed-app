@@ -33,6 +33,8 @@ export async function generateFeed(feedId: string) {
 
   const renderContext = { shopDomain, currencyCode, exponent, settings: feedSettings };
 
+  adapter.prepareHealthCheck?.(renderContext);
+
   try {
     const dbProducts = await db.product.findMany({
       where: {
@@ -124,7 +126,6 @@ export async function generateFeed(feedId: string) {
     throw error;
   }
 }
-
 
 export async function createFeed(params: { shopDomain: string; channel: string; name?: string | null }) {
   const adapter = findAdapter(params.channel);

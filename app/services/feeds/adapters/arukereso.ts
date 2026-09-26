@@ -1,5 +1,5 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult, RuleMeta, RenderContext } from "../types";
+import { FeedAdapter, RuleMeta, RenderContext } from "../types";
 import { formatMinor } from "app/utils/money";
 import { tag, cdataTag } from "../xml";
 
@@ -9,7 +9,7 @@ interface ArukeresoItem {
   name: string;
   category: string | null;
   product_url: string;
-  price: string;           
+  price: string;       
   image_url: string;
   ean_code: string | null;
   description: string | null;
@@ -18,10 +18,6 @@ interface ArukeresoItem {
 }
 
 let shopCurrencyCode: string | null = null;
-
-export function setShopCurrencyForHealthCheck(currencyCode: string): void {
-  shopCurrencyCode = currencyCode;
-}
 
 function isValidEan(value: string): boolean {
   return /^\d{8,13}$/.test(value);
@@ -122,7 +118,11 @@ export const arukeresoAdapter: FeedAdapter = {
     },
   ],
 
-  render(products: NormalizedProduct[], context: RenderContext): FeedRenderResult {
+  prepareHealthCheck(context: RenderContext) {
+    shopCurrencyCode = context.currencyCode;
+  },
+
+  render(products: NormalizedProduct[], context: RenderContext) {
     const { settings } = context;
     const exponent = 0;
     const items: ArukeresoItem[] = [];

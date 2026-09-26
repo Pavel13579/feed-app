@@ -75,5 +75,6 @@ export interface FeedAdapter {
   descriptor: ChannelDescriptor;
   rules: FeedRule[];
   ruleMeta: Record<string, RuleMeta>;
+  prepareHealthCheck?: (context: RenderContext) => void;
   render(products: NormalizedProduct[], context: RenderContext): FeedRenderResult;
 }

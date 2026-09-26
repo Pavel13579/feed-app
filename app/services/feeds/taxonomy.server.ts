@@ -1,23 +1,37 @@
-import googleRaw from "./taxonomies/google.en-US.txt?raw";
-import arukeresoRaw from "./taxonomies/arukereso.hu.txt?raw";
 import type { ChannelCategory } from "./types";
+
+const rawModules = import.meta.glob<string>("./taxonomies/*.txt", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+});
 
 interface TaxonomySource {
   raw: string;
   hasIds: boolean;
 }
 
-const TAXONOMY_SOURCES: Record<string, TaxonomySource> = {
-  google: { raw: googleRaw, hasIds: true },
-  arukereso: { raw: arukeresoRaw, hasIds: false },
-};
+const TAXONOMY_SOURCES: Record<string, TaxonomySource> = {};
+
+for (const [path, raw] of Object.entries(rawModules)) {
+  const filename = path.split("/").pop() ?? path;
+  const key = filename.split(".")[0];
+  if (!key) continue;
+
+  const firstContentLine = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("#"));
+  const hasIds = !!firstContentLine && firstContentLine.includes(" - ");
+
+  TAXONOMY_SOURCES[key] = { raw, hasIds };
+}
 
 interface ParsedTaxonomy {
   categories: ChannelCategory[];
   byId: Map<string, ChannelCategory>;
   lowerPaths: string[];
 }
-
 
 const cache = new Map<string, ParsedTaxonomy>();
 
@@ -96,6 +110,7 @@ export function searchTaxonomy(key: string, query: string): ChannelCategory[] {
   }
   return results;
 }
+
 
 export function resolveStoredCategoryValue(key: string, value: string): string {
   if (!/^\d+$/.test(value) || !isKnownTaxonomy(key)) return value;
