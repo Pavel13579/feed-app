@@ -154,8 +154,9 @@ export const arukeresoAdapter: FeedAdapter = {
         const hasImageError = !mainImageUrl;
         const hasLinkError = !product.link;
         const hasVariantIdError = !variant.shopifyId;
+        const hasCategoryError = !product.category;
 
-        if (hasPriceError || hasImageError || hasLinkError || hasVariantIdError) {
+        if (hasPriceError || hasImageError || hasLinkError || hasVariantIdError || hasCategoryError) {
           skippedCount++;
           continue;
         }
