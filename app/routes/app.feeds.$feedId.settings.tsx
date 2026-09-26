@@ -25,11 +25,13 @@ import { CategoryCombobox } from "app/components/CategoryCombobox";
 import {
   getFeedSettings,
   isValidPriceSettings,
+  isValidDeliverySettings,
   type CategoryMappingRow,
   type FeedSettings,
   type PriceSettings,
   type PriceMode,
   type PriceAdjustmentType,
+  type DeliverySettings,
 } from "app/services/feeds/settings";
 import { authenticateFeedRequest } from "app/models/feedAccess.server";
 
@@ -92,6 +94,50 @@ function priceFormStateToSettings(form: PriceFormState): PriceSettings {
   };
 }
 
+interface DeliveryFormState {
+  timeDaysRaw: string;
+  costMajorRaw: string; // "" = not set
+}
+
+function deliverySettingsToFormState(delivery: DeliverySettings): DeliveryFormState {
+  return {
+    timeDaysRaw: String(delivery.timeDays),
+    costMajorRaw: delivery.costMajor !== null ? String(delivery.costMajor) : "",
+  };
+}
+
+interface DeliveryFormErrors {
+  timeDaysError?: string;
+  costMajorError?: string;
+}
+
+function validateDeliveryForm(form: DeliveryFormState): DeliveryFormErrors & { valid: boolean } {
+  const errors: DeliveryFormErrors = {};
+
+  const daysTrimmed = form.timeDaysRaw.trim();
+  const days = Number(daysTrimmed);
+  if (daysTrimmed === "" || !Number.isInteger(days) || days < 0) {
+    errors.timeDaysError = "Enter a whole number ≥ 0";
+  }
+
+  const costTrimmed = form.costMajorRaw.trim();
+  if (costTrimmed !== "") {
+    const cost = Number(costTrimmed);
+    if (!Number.isFinite(cost) || cost < 0) {
+      errors.costMajorError = "Enter a number ≥ 0, or leave empty";
+    }
+  }
+
+  return { ...errors, valid: !errors.timeDaysError && !errors.costMajorError };
+}
+
+function deliveryFormStateToSettings(form: DeliveryFormState): DeliverySettings {
+  return {
+    timeDays: Math.max(0, Math.floor(Number(form.timeDaysRaw.trim()) || 0)),
+    costMajor: form.costMajorRaw.trim() === "" ? null : Number(form.costMajorRaw.trim()),
+  };
+}
+
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
 
@@ -142,6 +188,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     channel: adapter.descriptor,
     rows, taxonomyKey, totalProductCount, productsWithoutType,
     price: feedSettings.price,
+    delivery: feedSettings.delivery,
   });
 };
 
@@ -197,7 +244,23 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
-  const settings: FeedSettings = { categoryMapping, price: parsedPrice };
+  const rawDelivery = formData.get("delivery");
+
+  let parsedDelivery: unknown;
+  try {
+    parsedDelivery = JSON.parse(typeof rawDelivery === "string" ? rawDelivery : "null");
+  } catch {
+    return json({ success: false as const, error: "Malformed form submission" }, { status: 400 });
+  }
+
+  if (!isValidDeliverySettings(parsedDelivery)) {
+    return json(
+      { success: false as const, error: "Invalid delivery settings — check the values in the Delivery card." },
+      { status: 400 },
+    );
+  }
+
+  const settings: FeedSettings = { categoryMapping, price: parsedPrice, delivery: parsedDelivery };
 
   await db.feed.update({
     where: { id: feed.id },
@@ -209,13 +272,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function FeedSettingsPage() {
   const { feed, channel, rows: initialRows, taxonomyKey, totalProductCount,
-        productsWithoutType, price: initialPrice } = useLoaderData<typeof loader>();
+        productsWithoutType, price: initialPrice, delivery: initialDelivery } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
 
   const [rows, setRows] = useState<CategoryRow[]>(initialRows);
   const [priceForm, setPriceForm] = useState<PriceFormState>(() => priceSettingsToFormState(initialPrice));
+  const [deliveryForm, setDeliveryForm] = useState<DeliveryFormState>(() => deliverySettingsToFormState(initialDelivery));
   const isSaving = navigation.state === "submitting";
 
   useEffect(() => {
@@ -226,18 +290,24 @@ export default function FeedSettingsPage() {
     setPriceForm(priceSettingsToFormState(initialPrice));
   }, [initialPrice]);
 
+  useEffect(() => {
+    setDeliveryForm(deliverySettingsToFormState(initialDelivery));
+  }, [initialDelivery]);
+
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
   const priceErrors = validatePriceForm(priceForm);
+  const deliveryErrors = validateDeliveryForm(deliveryForm);
 
   const handleSave = () => {
-    if (!priceErrors.valid) return;
+    if (!priceErrors.valid || !deliveryErrors.valid) return;
 
     const formData = new FormData();
     formData.set("categoryMapping", JSON.stringify(rows));
     formData.set("price", JSON.stringify(priceFormStateToSettings(priceForm)));
+    formData.set("delivery", JSON.stringify(deliveryFormStateToSettings(deliveryForm)));
     submit(formData, { method: "POST" });
   };
 
@@ -428,12 +498,48 @@ export default function FeedSettingsPage() {
               </BlockStack>
             </Card>
 
+            {channel.fields.includes("delivery_time") && (
+              <Card>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Delivery
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Sent with every item in the feed — this channel requires it.
+                    </Text>
+                  </BlockStack>
+
+                  <TextField
+                    label="Delivery time (days)"
+                    type="number"
+                    min={0}
+                    value={deliveryForm.timeDaysRaw}
+                    onChange={(value) => setDeliveryForm((d) => ({ ...d, timeDaysRaw: value }))}
+                    error={deliveryErrors.timeDaysError}
+                    autoComplete="off"
+                    helpText="0 means in stock / ships today"
+                  />
+                  <TextField
+                    label="Delivery cost"
+                    type="number"
+                    min={0}
+                    value={deliveryForm.costMajorRaw}
+                    onChange={(value) => setDeliveryForm((d) => ({ ...d, costMajorRaw: value }))}
+                    error={deliveryErrors.costMajorError}
+                    placeholder="Leave empty to omit — enter 0 for free delivery"
+                    autoComplete="off"
+                  />
+                </BlockStack>
+              </Card>
+            )}
+
             <InlineStack align="end">
               <Button
                 variant="primary"
                 onClick={handleSave}
                 loading={isSaving}
-                disabled={isSaving || !priceErrors.valid}
+                disabled={isSaving || !priceErrors.valid || !deliveryErrors.valid}
               >
                 Save
               </Button>

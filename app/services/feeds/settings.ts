@@ -20,9 +20,15 @@ export interface PriceSettings {
   taxPercent: number | null;
 }
 
+export interface DeliverySettings {
+  timeDays: number;
+  costMajor: number | null;
+}
+
 export interface FeedSettings {
   categoryMapping: CategoryMappingRow[];
   price: PriceSettings;
+  delivery: DeliverySettings;
 }
 
 const DEFAULT_PRICE_SETTINGS: PriceSettings = {
@@ -32,9 +38,15 @@ const DEFAULT_PRICE_SETTINGS: PriceSettings = {
   taxPercent: null,
 };
 
+const DEFAULT_DELIVERY_SETTINGS: DeliverySettings = {
+  timeDays: 1,
+  costMajor: null,
+};
+
 const EMPTY_FEED_SETTINGS: FeedSettings = {
   categoryMapping: [],
   price: DEFAULT_PRICE_SETTINGS,
+  delivery: DEFAULT_DELIVERY_SETTINGS,
 };
 
 function isCategoryMappingRow(value: unknown): value is CategoryMappingRow {
@@ -114,9 +126,35 @@ function resolvePriceSettings(value: unknown): PriceSettings {
   return { mode, adjustmentType, adjustmentValue, taxPercent };
 }
 
+export function isValidDeliverySettings(value: unknown): value is DeliverySettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+
+  if (typeof v.timeDays !== "number" || !Number.isInteger(v.timeDays) || v.timeDays < 0) {
+    return false;
+  }
+
+  if (v.costMajor !== null) {
+    if (typeof v.costMajor !== "number" || !Number.isFinite(v.costMajor) || v.costMajor < 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function resolveDeliverySettings(value: unknown): DeliverySettings {
+  if (!isValidDeliverySettings(value)) return { ...DEFAULT_DELIVERY_SETTINGS };
+  return value;
+}
+
 export function getFeedSettings(settings: Prisma.JsonValue | null | undefined): FeedSettings {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-    return { ...EMPTY_FEED_SETTINGS, price: { ...DEFAULT_PRICE_SETTINGS } };
+    return {
+      ...EMPTY_FEED_SETTINGS,
+      price: { ...DEFAULT_PRICE_SETTINGS },
+      delivery: { ...DEFAULT_DELIVERY_SETTINGS },
+    };
   }
 
   const raw = settings as Record<string, unknown>;
@@ -124,6 +162,7 @@ export function getFeedSettings(settings: Prisma.JsonValue | null | undefined): 
     ? raw.categoryMapping.filter(isCategoryMappingRow)
     : [];
   const price = resolvePriceSettings(raw.price);
+  const delivery = resolveDeliverySettings(raw.delivery);
 
-  return { categoryMapping, price };
+  return { categoryMapping, price, delivery };
 }

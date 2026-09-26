@@ -1,7 +1,7 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult, FeedRule, RuleMeta } from "../types";
+import { FeedAdapter, FeedRenderResult, RuleMeta, RenderContext } from "../types";
 import { formatMinor } from "app/utils/money";
-import { escapeXml, tag, cdataTag } from "../xml";
+import { tag, cdataTag } from "../xml";
 
 interface ArukeresoItem {
   identifier: string;
@@ -11,8 +11,10 @@ interface ArukeresoItem {
   product_url: string;
   price: string;           
   image_url: string;
-  ean_code: string | null;  
+  ean_code: string | null;
   description: string | null;
+  delivery_time: string;
+  delivery_cost: string | null;
 }
 
 let shopCurrencyCode: string | null = null;
@@ -74,6 +76,7 @@ export const arukeresoAdapter: FeedAdapter = {
     healthyMessage:
       "No errors or warnings found in your product feed. Your catalog is ready for Árukereső.",
     taxonomy: "arukereso",
+    fields: ["delivery_time", "delivery_cost"],
   },
 
   ruleMeta: arukeresoRuleMeta,
@@ -119,11 +122,20 @@ export const arukeresoAdapter: FeedAdapter = {
     },
   ],
 
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
+  render(products: NormalizedProduct[], context: RenderContext): FeedRenderResult {
+    const { settings } = context;
     const exponent = 0;
     const items: ArukeresoItem[] = [];
     let invalidPriceCount = 0;
     let skippedCount = 0;
+
+    const deliveryTimeTag = String(settings.delivery.timeDays);
+    const deliveryCostTag =
+      settings.delivery.costMajor === null
+        ? null
+        : settings.delivery.costMajor === 0
+          ? "ingyenes"
+          : String(settings.delivery.costMajor);
 
     for (const product of products) {
       if (product.status && product.status.toUpperCase() !== "ACTIVE") continue;
@@ -161,6 +173,8 @@ export const arukeresoAdapter: FeedAdapter = {
           image_url: mainImageUrl!,
           ean_code: rawEan && isValidEan(rawEan) ? rawEan : null,
           description: product.descriptionHtml,
+          delivery_time: deliveryTimeTag,
+          delivery_cost: deliveryCostTag,
         });
       }
     }
@@ -177,6 +191,8 @@ export const arukeresoAdapter: FeedAdapter = {
           tag("image_url", item.image_url),
           tag("ean_code", item.ean_code),
           cdataTag("description", item.description),
+          tag("delivery_time", item.delivery_time),
+          tag("delivery_cost", item.delivery_cost),
         ].filter((line): line is string => line !== null);
 
         return `<product>\n${fields.join("\n")}\n</product>`;

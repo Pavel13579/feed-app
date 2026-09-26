@@ -1,10 +1,10 @@
 import { dbProductToNormalized } from "./normalizer.server";
 import db from "../db.server";
 import { findAdapter, getAdapter } from "app/services/feeds/registry";
-import { FEED_NAME_MAX_LENGTH } from "app/services/feeds/constants";
 import { getFeedSettings } from "app/services/feeds/settings";
 import { getCurrencyExponent } from "app/utils/money";
 import { checkProducts } from "app/services/feeds/health";
+import { FEED_NAME_MAX_LENGTH } from "app/services/feeds/constants";
 
 export async function generateFeed(feedId: string) {
   const feed = await db.feed.findUnique({
@@ -25,15 +25,17 @@ export async function generateFeed(feedId: string) {
     );
   }
   const currencyCode = shop.currencyCode;
-  
+
   const exponent = getCurrencyExponent(currencyCode);
 
   const adapter = getAdapter(channel);
   const feedSettings = getFeedSettings(feed.settings);
 
+  const renderContext = { shopDomain, currencyCode, exponent, settings: feedSettings };
+
   try {
     const dbProducts = await db.product.findMany({
-      where: { 
+      where: {
         shopId: shopId,
         status: "ACTIVE",
       },
@@ -44,12 +46,12 @@ export async function generateFeed(feedId: string) {
     });
 
     if (dbProducts.length === 0) {
-      const { xml } = adapter.render([], shopDomain, currencyCode);
+      const { xml } = adapter.render([], renderContext);
 
       const updatedFeed = await db.feed.update({
         where: { id: feedId },
         data: {
-          content: xml, 
+          content: xml,
           itemCount: 0,
           errorCount: 0,
           warningCount: 0,
@@ -77,15 +79,16 @@ export async function generateFeed(feedId: string) {
 
     const rawIssues = checkProducts(normalizedProducts, adapter.rules);
 
-    const errorCount = rawIssues.filter(i => i.severity === "error").length;
-    const warningCount = rawIssues.filter(i => i.severity === "warning").length;
+    const errorCount = rawIssues.filter((i) => i.severity === "error").length;
+    const warningCount = rawIssues.filter((i) => i.severity === "warning").length;
 
     const totalVariants = normalizedProducts.reduce((acc, p) => acc + p.variants.length, 0);
-    const healthScore = totalVariants > 0
-      ? Math.max(0, Math.round(((totalVariants - errorCount) / totalVariants) * 100))
-      : 100;
+    const healthScore =
+      totalVariants > 0
+        ? Math.max(0, Math.round(((totalVariants - errorCount) / totalVariants) * 100))
+        : 100;
 
-    const { xml, itemCount } = adapter.render(normalizedProducts, shopDomain, currencyCode);
+    const { xml, itemCount } = adapter.render(normalizedProducts, renderContext);
 
     const updatedFeed = await db.$transaction(async (tx) => {
       await tx.feedIssue.deleteMany({ where: { feedId } });
@@ -98,7 +101,7 @@ export async function generateFeed(feedId: string) {
             variantId: issue.variantId,
             code: issue.code,
             severity: issue.severity,
-            message: issue.message,
+            message: issue.message ?? null,
           })),
         });
       }
@@ -107,7 +110,7 @@ export async function generateFeed(feedId: string) {
         where: { id: feedId },
         data: {
           content: xml,
-          itemCount: itemCount, 
+          itemCount,
           errorCount,
           warningCount,
           healthScore,
@@ -116,18 +119,12 @@ export async function generateFeed(feedId: string) {
       });
     });
 
-    return {
-      ...updatedFeed,
-      errorCount,
-      warningCount,
-      healthScore,
-    };
-
+    return updatedFeed;
   } catch (error) {
-    console.error(`Failed for feed ${feedId}:`, error);
     throw error;
   }
 }
+
 
 export async function createFeed(params: { shopDomain: string; channel: string; name?: string | null }) {
   const adapter = findAdapter(params.channel);
