@@ -1,4 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { useSubmit, useNavigation, useActionData, useLoaderData } from "@remix-run/react";
 import { useState, useCallback } from "react";
 import {
@@ -13,56 +14,38 @@ import {
   Badge,
   TextField,
 } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
-import db from "../db.server";
-import { json } from "@remix-run/node";
-import { googleAdapter } from "app/services/feeds/adapters/google";
-import { ensureShopAndFeed, generateFeed } from "app/models/feed.server";
+import { generateFeed } from "app/models/feed.server";
+import { authenticateFeedRequest } from "app/models/feedAccess.server";
+import { DeleteFeedModal } from "app/components/DeleteFeedModal";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  const shop = await db.shop.findUnique({
-    where: { shopDomain: shopDomain },
-  });
-
-  let feedToken = null;
-  if (shop) {
-    const feed = await db.feed.findFirst({
-      where: {
-        shopId: shop.id,
-        channel: googleAdapter.channel,
-      },
-    });
-    if (feed) {
-      feedToken = feed.token;
-    }
-  }
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { feed, adapter } = await authenticateFeedRequest(request, params.feedId);
 
   const appUrl = process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
-  return json({ appUrl, feedToken });
+  return json({
+    feed: {
+      id: feed.id,
+      name: feed.name,
+      lastGeneratedAt: feed.lastGeneratedAt,
+      itemCount: feed.itemCount,
+    },
+    channel: adapter.descriptor,
+    feedUrl: `${appUrl}/feed/${feed.token}/${adapter.filename}`,
+  });
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  const { feed } = await ensureShopAndFeed(
-    shopDomain, 
-    googleAdapter.channel, 
-    "Google Shopping Feed"
-  );
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { feed } = await authenticateFeedRequest(request, params.feedId);
 
   try {
     const updatedFeed = await generateFeed(feed.id);
     const xmlSizeBytes = Buffer.byteLength(updatedFeed.content || "", "utf8");
     const xmlSizeKb = (xmlSizeBytes / 1024).toFixed(2);
 
-    return json({ 
-      success: true, 
-      message: "Feed successfully updated", 
+    return json({
+      success: true as const,
+      message: "Feed successfully updated",
       feed: {
         itemCount: updatedFeed.itemCount,
         errorCount: updatedFeed.errorCount,
@@ -70,15 +53,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         healthScore: updatedFeed.healthScore,
         lastGeneratedAt: updatedFeed.lastGeneratedAt,
         sizeKb: xmlSizeKb,
-        preview: updatedFeed.content ? updatedFeed.content.substring(0, 500) + "..." : ""
-      }
+        preview: updatedFeed.content ? updatedFeed.content.substring(0, 500) + "..." : "",
+      },
     });
   } catch (error: any) {
-    return json({ 
-      success: false, 
-      message: `Generation failed: ${error.message}`,
-      feed: null 
-    }, { status: 500 });
+    return json(
+      {
+        success: false as const,
+        message: `Generation failed: ${error.message}`,
+        feed: null,
+      },
+      { status: 500 },
+    );
   }
 };
 
@@ -86,12 +72,11 @@ export default function FeedPage() {
   const submit = useSubmit();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
-  const { appUrl, feedToken } = useLoaderData<typeof loader>();
+  const { feed, channel, feedUrl } = useLoaderData<typeof loader>();
 
   const [isCopied, setIsCopied] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const isLoading = navigation.state === "submitting";
-
-  const feedUrl = feedToken ? `${appUrl}/feed/${feedToken}/${googleAdapter.filename}` : "";
 
   const handleSync = () => {
     submit(null, { method: "POST" });
@@ -103,24 +88,30 @@ export default function FeedPage() {
       await navigator.clipboard.writeText(feedUrl);
       setIsCopied(true);
 
-      if (typeof shopify !== 'undefined' && shopify.toast) {
-        shopify.toast.show('Link copied');
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show("Link copied");
       }
 
       setTimeout(() => setIsCopied(false), 2000);
     } catch (error) {
-      console.error('Failed to copy feed URL:', error);
+      console.error("Failed to copy feed URL:", error);
 
-      if (typeof shopify !== 'undefined' && shopify.toast) {
-        shopify.toast.show('Could not copy link — please copy it manually', { isError: true });
+      if (typeof shopify !== "undefined" && shopify.toast) {
+        shopify.toast.show("Could not copy link — please copy it manually", { isError: true });
       }
     }
   }, [feedUrl]);
 
   return (
-    <Page 
-      title="Feed Generation"
-      backAction={{ content: "Back", url: "/app" }} 
+    <Page
+      title={feed.name}
+      subtitle={channel.label}
+      backAction={{ content: "Feeds", url: "/app/feeds" }}
+      secondaryActions={[
+        { content: "Settings", url: `/app/feeds/${feed.id}/settings` },
+        { content: "Health", url: `/app/feeds/${feed.id}/health` },
+        { content: "Delete", destructive: true, onAction: () => setShowDelete(true) },
+      ]}
     >
       <Layout>
         <Layout.Section>
@@ -165,32 +156,30 @@ export default function FeedPage() {
           )}
 
           <BlockStack gap="400">
-            {feedUrl && (
-              <Card>
-                <BlockStack gap="300">
-                  <BlockStack gap="100">
-                    <Text as="h2" variant="headingMd">
-                      Your Google Merchant Feed URL
-                    </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      Copy this link and submit it to Google Merchant Center.
-                    </Text>
-                  </BlockStack>
-                  <TextField
-                    label="Feed URL"
-                    labelHidden
-                    value={feedUrl}
-                    readOnly
-                    autoComplete="off"
-                    connectedRight={
-                      <Button onClick={handleCopyUrl} variant={isCopied ? "primary" : "secondary"}>
-                        {isCopied ? "Copied!" : "Copy URL"}
-                      </Button>
-                    }
-                  />
+            <Card>
+              <BlockStack gap="300">
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd">
+                    {`Your ${channel.submitTo} Feed URL`}
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {`Copy this link and submit it to ${channel.submitTo}.`}
+                  </Text>
                 </BlockStack>
-              </Card>
-            )}
+                <TextField
+                  label="Feed URL"
+                  labelHidden
+                  value={feedUrl}
+                  readOnly
+                  autoComplete="off"
+                  connectedRight={
+                    <Button onClick={handleCopyUrl} variant={isCopied ? "primary" : "secondary"}>
+                      {isCopied ? "Copied!" : "Copy URL"}
+                    </Button>
+                  }
+                />
+              </BlockStack>
+            </Card>
 
             <Card>
               <BlockStack gap="400">
@@ -199,14 +188,14 @@ export default function FeedPage() {
                     Force Rebuild Feed
                   </Text>
                   <Text as="p" variant="bodyMd">
-                    Click the button below to force rebuild your product feed. This will compile all active variants and map them into standard Google Merchant Center format.
+                    {`Click the button below to force rebuild your product feed. ${channel.rebuildHint}`}
                   </Text>
                 </BlockStack>
 
                 <BlockStack gap="200">
-                  <Button 
-                    variant="primary" 
-                    size="large" 
+                  <Button
+                    variant="primary"
+                    size="large"
                     onClick={handleSync}
                     loading={isLoading}
                     disabled={isLoading}
@@ -221,14 +210,16 @@ export default function FeedPage() {
               <Card>
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm">XML Preview (First 500 chars):</Text>
-                  <pre style={{ 
-                    background: "#f4f6f8", 
-                    padding: "12px", 
-                    borderRadius: "4px", 
-                    overflowX: "auto",
-                    fontSize: "12px",
-                    fontFamily: "monospace"
-                  }}>
+                  <pre
+                    style={{
+                      background: "#f4f6f8",
+                      padding: "12px",
+                      borderRadius: "4px",
+                      overflowX: "auto",
+                      fontSize: "12px",
+                      fontFamily: "monospace",
+                    }}
+                  >
                     {actionData.feed.preview}
                   </pre>
                 </BlockStack>
@@ -237,6 +228,11 @@ export default function FeedPage() {
           </BlockStack>
         </Layout.Section>
       </Layout>
+
+      <DeleteFeedModal
+        feed={showDelete ? { id: feed.id, name: feed.name } : null}
+        onClose={() => setShowDelete(false)}
+      />
     </Page>
   );
 }

@@ -1,4 +1,5 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
+import type { FeedSettings } from "./settings";
 
 export type Severity = "error" | "warning";
 
@@ -23,28 +24,57 @@ export interface FeedRenderResult {
   invalidPriceCount: number;
 }
 
+export interface FeedSummary {
+  healthScore: number | null;
+  errorCount: number;
+  warningCount: number;
+  groups: FeedIssueGroup[];
+}
+
+export interface FeedIssueGroup {
+  code: string;
+  severity: Severity;
+  productCount: number;
+}
+
 export interface ChannelCategory {
-  id: string;
+  id: string | null;
   path: string;
+}
+
+export interface RuleMeta {
+  title: string;
+  hint: string;
+}
+
+export interface RenderContext {
+  shopDomain: string;
+  currencyCode: string;
+  exponent: number;
+  settings: FeedSettings;
+}
+
+export interface ChannelDescriptor {
+  label: string;
+  defaultFeedName: string;
+  submitTo: string;
+  categoryLabel: string;
+  categoryHint: string;
+  customCategoryPlaceholder: string;
+  rebuildHint: string;
+  healthSubtitle: string;
+  healthyMessage: string;
+  taxonomy: string;
+  fields: string[];
 }
 
 export interface FeedAdapter {
   channel: string;
   filename: string;
-  categories: ChannelCategory[];
+  contentType: string;
+  descriptor: ChannelDescriptor;
   rules: FeedRule[];
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult;
+  ruleMeta: Record<string, RuleMeta>;
+  prepareHealthCheck?: (context: RenderContext) => void;
+  render(products: NormalizedProduct[], context: RenderContext): FeedRenderResult;
 }
-
-export type FeedIssueGroup = {
-  code: string;
-  severity: Severity;
-  productCount: number;
-};
-
-export type FeedSummary = {
-  healthScore: number | null;
-  errorCount: number;
-  warningCount: number;
-  groups: FeedIssueGroup[];
-};

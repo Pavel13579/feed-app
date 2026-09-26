@@ -1,32 +1,92 @@
 import { NormalizedProduct } from "app/types/NormalizedProduct";
-import { FeedAdapter, FeedRenderResult, FeedRule } from "../types";
-import { googleCategories } from "./google-categories";
+import { FeedAdapter, FeedRenderResult, FeedRule, RuleMeta, RenderContext } from "../types";
 import { formatMinor } from "app/utils/money";
+import { escapeXml, cdata as wrapInCData } from "../xml";
 
 interface GoogleItem {
-  id: string;                 
-  item_group_id: string;          
-  title: string;                 
-  description: string;          
-  link: string;                  
-  image_link: string;            
-  availability: "in_stock" | "out_of_stock"; 
-  price: string;                 
-  sale_price: string | null;     
-  condition: "new";              
-  brand: string | null;          
-  gtin: string | null;           
-  mpn: string | null;            
+  id: string;
+  item_group_id: string;
+  title: string;
+  description: string;
+  link: string;
+  image_link: string;
+  availability: "in_stock" | "out_of_stock";
+  price: string;
+  sale_price: string | null;
+  condition: "new";
+  brand: string | null;
+  gtin: string | null;
+  mpn: string | null;
   identifier_exists: "true" | "false";
   google_product_category: string | null;
   product_type: string | null;
 }
 
+export const googleRuleMeta: Record<string, RuleMeta> = {
+  MISSING_IMAGE: {
+    title: "Missing product image",
+    hint: "Upload at least one main product image in your Shopify admin.",
+  },
+  MISSING_LINK: {
+    title: "Missing product link",
+    hint: "Ensure the product has a valid SEO handle and is published.",
+  },
+  PRICE_ZERO: {
+    title: "Invalid or zero price",
+    hint: "Set a price greater than 0 for all product variants.",
+  },
+  MISSING_VARIANT_ID: {
+    title: "Missing variant ID",
+    hint: "Ensure the product variant is properly synced from Shopify.",
+  },
+  INVALID_GTIN: {
+    title: "Invalid GTIN / Barcode",
+    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
+  },
+  NO_CATEGORY: {
+    title: "Missing Google Product Category",
+    hint: "Assign an official Google product category to this product.",
+  },
+  NO_BRAND: {
+    title: "Missing brand (vendor)",
+    hint: "Fill in the vendor/brand field for the product in Shopify.",
+  },
+  TITLE_TOO_LONG: {
+    title: "Title exceeds 150 characters",
+    hint: "Shorten the product title to comply with Google Shopping guidelines.",
+  },
+  EMPTY_DESCRIPTION: {
+    title: "Empty product description",
+    hint: "Add a description or rich text content to describe the product.",
+  },
+};
+
+function isValidGtin(value: string): boolean {
+  return /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(value);
+}
+
 export const googleAdapter: FeedAdapter = {
   channel: "google",
   filename: "google.xml",
-  categories: googleCategories,
-  
+  contentType: "application/xml; charset=utf-8",
+  descriptor: {
+    label: "Google Shopping",
+    defaultFeedName: "Google Shopping Feed",
+    submitTo: "Google Merchant Center",
+    categoryLabel: "Google category",
+    categoryHint:
+      "Map each of your product types to a Google product category. Unmapped product types are sent without g:google_product_category.",
+    customCategoryPlaceholder: "Apparel & Accessories > Clothing > Shirts & Tops",
+    rebuildHint:
+      "This will compile all active variants and map them into standard Google Merchant Center format.",
+    healthSubtitle: "Google Merchant Center catalog diagnostics",
+    healthyMessage:
+      "No errors or warnings found in your product feed. Your catalog is fully optimized for Google Shopping.",
+    taxonomy: "google",
+    fields: [],
+  },
+  ruleMeta: googleRuleMeta,
+
   rules: [
     {
       code: "MISSING_IMAGE",
@@ -79,8 +139,8 @@ export const googleAdapter: FeedAdapter = {
     },
   ],
 
-  render(products: NormalizedProduct[], shopDomain: string, currencyCode: string): FeedRenderResult {
-    const exponent = getCurrencyExponentForGoogle(currencyCode);
+  render(products: NormalizedProduct[], context: RenderContext): FeedRenderResult {
+    const { shopDomain, exponent } = context;
     const items: GoogleItem[] = [];
     let invalidPriceCount = 0;
 
@@ -94,48 +154,39 @@ export const googleAdapter: FeedAdapter = {
         const variantId = variant.shopifyId;
 
         const hasPriceError = variant.priceMinor === null || variant.priceMinor <= 0;
+        if (hasPriceError) invalidPriceCount++;
+
         const hasImageError = !mainImageUrl;
         const hasLinkError = !product.link;
         const hasVariantIdError = !variantId;
-
-        if (hasPriceError) {
-          invalidPriceCount++;
-        }
 
         if (hasPriceError || hasImageError || hasLinkError || hasVariantIdError) {
           continue;
         }
 
-        const formattedPrice = `${formatMinor(variant.priceMinor!, exponent)} ${currencyCode}`;
-        const formattedSalePrice = variant.salePriceMinor !== null
-          ? `${formatMinor(variant.salePriceMinor, exponent)} ${currencyCode}`
-          : null;
+        const priceMinor = variant.priceMinor!;
+        const saleMinor = variant.salePriceMinor;
+        const hasSale = saleMinor !== null && saleMinor < priceMinor;
 
-        const rawGtin = variant.barcode?.trim() || null;
-        const gtin = isValidGtin(rawGtin) ? rawGtin : null; 
-        const mpn = variant.sku?.trim() || null;
-        const brand = product.vendor?.trim() || null;
-        
-        const hasUniqueIdentifier = !!(gtin || mpn);
-        const identifierExists: "true" | "false" = hasUniqueIdentifier ? "true" : "false";
-
-        const itemLink = `${product.link}?variant=${variantId}`;
+        const rawBarcode = variant.barcode?.trim() || null;
+        const gtin = rawBarcode && isValidGtin(rawBarcode) ? rawBarcode : null;
+        const mpn = !gtin && variant.sku?.trim() ? variant.sku.trim() : null;
 
         items.push({
-          id: variant.shopifyId,    
-          item_group_id: product.shopifyId,
+          id: variantId,
+          item_group_id: product.id,
           title: product.title,
-          description: product.descriptionHtml || product.title, 
-          link: itemLink,
-          image_link: mainImageUrl,
+          description: product.descriptionHtml ?? "",
+          link: `${product.link}?variant=${variantId}`,
+          image_link: mainImageUrl!,
           availability: variant.isAvailable ? "in_stock" : "out_of_stock",
-          price: formattedPrice,
-          sale_price: formattedSalePrice,
+          price: `${formatMinor(priceMinor, exponent)} ${context.currencyCode}`,
+          sale_price: hasSale ? `${formatMinor(saleMinor!, exponent)} ${context.currencyCode}` : null,
           condition: "new",
-          brand: brand,
-          gtin: gtin,
-          mpn: mpn,
-          identifier_exists: identifierExists,
+          brand: product.vendor?.trim() || null,
+          gtin,
+          mpn,
+          identifier_exists: gtin || mpn ? "true" : "false",
           google_product_category: product.category,
           product_type: product.productType,
         });
@@ -195,75 +246,8 @@ export const googleAdapter: FeedAdapter = {
     return {
       xml,
       itemCount: items.length,
-      skippedCount: 0, 
+      skippedCount: 0,
       invalidPriceCount,
     };
-  }
-};
-
-function escapeXml(unsafe: string): string {
-  return unsafe.replace(/[<>&'"]/g, (char) => {
-    switch (char) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '&': return '&amp;';
-      case '"': return '&quot;';
-      case "'": return '&apos;';
-      default: return char;
-    }
-  });
-}
-
-function isValidGtin(gtin: string | null | undefined): boolean {
-  if (!gtin) return false;
-  const cleanGtin = gtin.trim();
-  return /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(cleanGtin);
-}
-
-function wrapInCData(html: string): string {
-  const cleanHtml = html.replace(/]]>/g, ']]]]><![CDATA[>');
-  return `<![CDATA[${cleanHtml}]]>`;
-}
-
-function getCurrencyExponentForGoogle(currencyCode: string): number {
-  return currencyCode.toUpperCase() === "HUF" ? 0 : 2;
-}
-
-export const googleRuleMeta: Record<string, { title: string; hint: string }> = {
-  MISSING_IMAGE: {
-    title: "Missing product image",
-    hint: "Upload at least one main product image in your Shopify admin.",
-  },
-  MISSING_LINK: {
-    title: "Missing product link",
-    hint: "Ensure the product has a valid SEO handle and is published.",
-  },
-  PRICE_ZERO: {
-    title: "Invalid or zero price",
-    hint: "Set a price greater than 0 for all product variants.",
-  },
-  MISSING_VARIANT_ID: {
-    title: "Missing variant ID",
-    hint: "Ensure the product variant is properly synced from Shopify.",
-  },
-  INVALID_GTIN: {
-    title: "Invalid GTIN / Barcode",
-    hint: "Provide a valid 8, 12, 13 or 14-digit GS1-compliant barcode.",
-  },
-  NO_CATEGORY: {
-    title: "Missing Google Product Category",
-    hint: "Assign an official Google product category to this product.",
-  },
-  NO_BRAND: {
-    title: "Missing brand (vendor)",
-    hint: "Fill in the vendor/brand field for the product in Shopify.",
-  },
-  TITLE_TOO_LONG: {
-    title: "Title exceeds 150 characters",
-    hint: "Shorten the product title to comply with Google Shopping guidelines.",
-  },
-  EMPTY_DESCRIPTION: {
-    title: "Empty product description",
-    hint: "Add a description or rich text content to describe the product.",
   },
 };

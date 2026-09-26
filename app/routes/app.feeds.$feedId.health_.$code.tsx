@@ -14,38 +14,22 @@ import {
   IndexTable,
   Pagination,
 } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
-import db from "../db.server";
-import { googleAdapter, googleRuleMeta } from "app/services/feeds/adapters/google";
-import { isKnownIssueCode } from "app/services/feeds/registry";
 import { adminProductUrl } from "app/utils/shopifyGid";
 import { getIssueProductsPage, ISSUE_PAGE_SIZE } from "app/models/feedIssues.server";
+import { authenticateFeedRequest } from "app/models/feedAccess.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
   const shopDomain = session.shop;
-
   const code = (params.code ?? "").toUpperCase();
 
-  if (!isKnownIssueCode(googleAdapter.channel, code)) {
+  if (!adapter.rules.some((rule) => rule.code === code)) {
     throw new Response(`Unknown issue code: ${code}`, { status: 404 });
   }
 
   const url = new URL(request.url);
   const rawPage = Number(url.searchParams.get("page"));
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
-
-  const shop = await db.shop.findUnique({
-    where: { shopDomain },
-    select: { id: true },
-  });
-  if (!shop) throw new Response("Shop not found", { status: 404 });
-
-  const feed = await db.feed.findFirst({
-    where: { shopId: shop.id, channel: googleAdapter.channel },
-    select: { id: true, lastGeneratedAt: true },
-  });
-  if (!feed) throw new Response("Feed not found", { status: 404 });
 
   const { rows, totalProducts, page: safePage, pageCount } =
     await getIssueProductsPage({
@@ -57,9 +41,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     });
 
   return json({
+    feedId: feed.id,
+    feedName: feed.name,
     code,
-    meta: googleRuleMeta[code] ?? { title: code, hint: "Review product attributes." },
-    severity: googleAdapter.rules.find((rule) => rule.code === code)?.severity ?? "warning",
+    meta: adapter.ruleMeta[code] ?? { title: code, hint: "Review product attributes." },
+    severity: adapter.rules.find((rule) => rule.code === code)?.severity ?? "warning",
     lastGeneratedAt: feed.lastGeneratedAt,
     products: rows.map((row) => ({
       ...row,
@@ -72,19 +58,23 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export default function FeedHealthIssuePage() {
-  const { code, meta, severity, products, totalProducts, page, pageCount, lastGeneratedAt } =
+  const { feedId, feedName, code, meta, severity, products, totalProducts, page, pageCount, lastGeneratedAt } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const goToPage = (next: number) => {
-    navigate(next <= 1 ? `/app/feed/health/${code}` : `/app/feed/health/${code}?page=${next}`);
+    navigate(
+      next <= 1
+        ? `/app/feeds/${feedId}/health/${code}`
+        : `/app/feeds/${feedId}/health/${code}?page=${next}`,
+    );
   };
 
   return (
     <Page
       title={meta.title}
       subtitle={code}
-      backAction={{ content: "Feed Health", url: "/app/feed/health" }}
+      backAction={{ content: `${feedName} — Health`, url: `/app/feeds/${feedId}/health` }}
       titleMetadata={
         <Badge tone={severity === "error" ? "critical" : "warning"}>{severity}</Badge>
       }

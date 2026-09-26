@@ -19,22 +19,21 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { Prisma } from "@prisma/client";
-import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { googleAdapter } from "app/services/feeds/adapters/google";
-import { getChannelCategories } from "app/services/feeds/registry";
+import { resolveStoredCategoryValue } from "app/services/feeds/taxonomy.server";
+import { CategoryCombobox } from "app/components/CategoryCombobox";
 import {
   getFeedSettings,
   isValidPriceSettings,
+  isValidDeliverySettings,
   type CategoryMappingRow,
   type FeedSettings,
   type PriceSettings,
   type PriceMode,
   type PriceAdjustmentType,
+  type DeliverySettings,
 } from "app/services/feeds/settings";
-import { ensureShopAndFeed } from "app/models/feed.server";
-
-const CHANNEL = googleAdapter.channel;
+import { authenticateFeedRequest } from "app/models/feedAccess.server";
 
 interface CategoryRow extends CategoryMappingRow {
   productCount: number;
@@ -90,34 +89,65 @@ function priceFormStateToSettings(form: PriceFormState): PriceSettings {
   return {
     mode: form.mode,
     adjustmentType: form.adjustmentType,
-    adjustmentValue, 
+    adjustmentValue,
     taxPercent,
   };
 }
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
+interface DeliveryFormState {
+  timeDaysRaw: string;
+  costMajorRaw: string; // "" = not set
+}
 
-  const shop = await db.shop.findUnique({ where: { shopDomain } });
+function deliverySettingsToFormState(delivery: DeliverySettings): DeliveryFormState {
+  return {
+    timeDaysRaw: String(delivery.timeDays),
+    costMajorRaw: delivery.costMajor !== null ? String(delivery.costMajor) : "",
+  };
+}
 
-  const feed = shop
-    ? await db.feed.findFirst({ where: { shopId: shop.id, channel: CHANNEL } })
-    : null;
+interface DeliveryFormErrors {
+  timeDaysError?: string;
+  costMajorError?: string;
+}
 
-  const feedSettings = getFeedSettings(feed?.settings ?? null);
-  const channelCategories = getChannelCategories(CHANNEL);
+function validateDeliveryForm(form: DeliveryFormState): DeliveryFormErrors & { valid: boolean } {
+  const errors: DeliveryFormErrors = {};
 
-  const totalProductCount = shop ? await db.product.count({ where: { shopId: shop.id } }) : 0;
+  const daysTrimmed = form.timeDaysRaw.trim();
+  const days = Number(daysTrimmed);
+  if (daysTrimmed === "" || !Number.isInteger(days) || days < 0) {
+    errors.timeDaysError = "Enter a whole number ≥ 0";
+  }
 
-  const productTypeCounts = shop
-    ? await db.product.groupBy({
-        by: ["productType"],
-        where: { shopId: shop.id },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-      })
-    : [];
+  const costTrimmed = form.costMajorRaw.trim();
+  if (costTrimmed !== "") {
+    const cost = Number(costTrimmed);
+    if (!Number.isFinite(cost) || cost < 0) {
+      errors.costMajorError = "Enter a number ≥ 0, or leave empty";
+    }
+  }
+
+  return { ...errors, valid: !errors.timeDaysError && !errors.costMajorError };
+}
+
+function deliveryFormStateToSettings(form: DeliveryFormState): DeliverySettings {
+  return {
+    timeDays: Math.max(0, Math.floor(Number(form.timeDaysRaw.trim()) || 0)),
+    costMajor: form.costMajorRaw.trim() === "" ? null : Number(form.costMajorRaw.trim()),
+  };
+}
+
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { shop, feed, adapter } = await authenticateFeedRequest(request, params.feedId);
+
+  const feedSettings = getFeedSettings(feed.settings);
+  const taxonomyKey = adapter.descriptor.taxonomy;
+  const totalProductCount = await db.product.count({ where: { shopId: shop.id } });
+  const productTypeCounts = await db.product.groupBy({
+    by: ["productType"], where: { shopId: shop.id },
+    _count: { id: true }, orderBy: { _count: { id: "desc" } },
+  });
 
   const savedByType = new Map(feedSettings.categoryMapping.map((row) => [row.productType, row]));
   const dbTypes = new Set<string>();
@@ -134,7 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     rows.push({
       productType: entry.productType,
-      category: saved?.category ?? null,
+      category: saved?.category ? resolveStoredCategoryValue(taxonomyKey, saved.category) : null,
       custom: saved?.custom ?? false,
       customValue: saved?.customValue ?? null,
       productCount: entry._count.id,
@@ -143,30 +173,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   for (const saved of feedSettings.categoryMapping) {
     if (!dbTypes.has(saved.productType)) {
-      rows.push({ ...saved, productCount: 0 });
+      rows.push({
+        ...saved,
+        category: saved.category ? resolveStoredCategoryValue(taxonomyKey, saved.category) : null,
+        productCount: 0,
+      });
     }
   }
 
   const productsWithoutType = totalProductCount - typedProductCount;
 
   return json({
-    rows,
-    channelCategories,
-    totalProductCount,
-    productsWithoutType,
+    feed: { id: feed.id, name: feed.name },
+    channel: adapter.descriptor,
+    rows, taxonomyKey, totalProductCount, productsWithoutType,
     price: feedSettings.price,
+    delivery: feedSettings.delivery,
   });
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shopDomain = session.shop;
-
-  const { feed } = await ensureShopAndFeed(
-    shopDomain, 
-    googleAdapter.channel, 
-    "Google Shopping Feed"
-  );
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { feed } = await authenticateFeedRequest(request, params.feedId);
 
   const formData = await request.formData();
 
@@ -217,7 +244,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const settings: FeedSettings = { categoryMapping, price: parsedPrice };
+  const rawDelivery = formData.get("delivery");
+
+  let parsedDelivery: unknown;
+  try {
+    parsedDelivery = JSON.parse(typeof rawDelivery === "string" ? rawDelivery : "null");
+  } catch {
+    return json({ success: false as const, error: "Malformed form submission" }, { status: 400 });
+  }
+
+  if (!isValidDeliverySettings(parsedDelivery)) {
+    return json(
+      { success: false as const, error: "Invalid delivery settings — check the values in the Delivery card." },
+      { status: 400 },
+    );
+  }
+
+  const settings: FeedSettings = { categoryMapping, price: parsedPrice, delivery: parsedDelivery };
 
   await db.feed.update({
     where: { id: feed.id },
@@ -228,19 +271,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function FeedSettingsPage() {
-  const {
-    rows: initialRows,
-    channelCategories,
-    totalProductCount,
-    productsWithoutType,
-    price: initialPrice,
-  } = useLoaderData<typeof loader>();
+  const { feed, channel, rows: initialRows, taxonomyKey, totalProductCount,
+        productsWithoutType, price: initialPrice, delivery: initialDelivery } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
 
   const [rows, setRows] = useState<CategoryRow[]>(initialRows);
   const [priceForm, setPriceForm] = useState<PriceFormState>(() => priceSettingsToFormState(initialPrice));
+  const [deliveryForm, setDeliveryForm] = useState<DeliveryFormState>(() => deliverySettingsToFormState(initialDelivery));
   const isSaving = navigation.state === "submitting";
 
   useEffect(() => {
@@ -251,23 +290,24 @@ export default function FeedSettingsPage() {
     setPriceForm(priceSettingsToFormState(initialPrice));
   }, [initialPrice]);
 
-  const categoryOptions = [
-    { label: "Not selected", value: "" },
-    ...channelCategories.map((cat) => ({ label: cat.path, value: cat.path })),
-  ];
+  useEffect(() => {
+    setDeliveryForm(deliverySettingsToFormState(initialDelivery));
+  }, [initialDelivery]);
 
   const updateRow = (index: number, patch: Partial<CategoryRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
   const priceErrors = validatePriceForm(priceForm);
+  const deliveryErrors = validateDeliveryForm(deliveryForm);
 
   const handleSave = () => {
-    if (!priceErrors.valid) return;
+    if (!priceErrors.valid || !deliveryErrors.valid) return;
 
     const formData = new FormData();
     formData.set("categoryMapping", JSON.stringify(rows));
     formData.set("price", JSON.stringify(priceFormStateToSettings(priceForm)));
+    formData.set("delivery", JSON.stringify(deliveryFormStateToSettings(deliveryForm)));
     submit(formData, { method: "POST" });
   };
 
@@ -282,7 +322,9 @@ export default function FeedSettingsPage() {
   const showAdjustmentFields = priceForm.mode === "web_plus" || priceForm.mode === "web_minus";
 
   return (
-    <Page title="Feed Settings" backAction={{ content: "Back", url: "/app/feed" }}>
+    <Page title="Feed Settings"
+      subtitle={`${feed.name} · ${channel.label}`}
+      backAction={{ content: feed.name, url: `/app/feeds/${feed.id}` }}>
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
@@ -329,8 +371,7 @@ export default function FeedSettingsPage() {
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Map each of your product types to a Google product category. Unmapped
-                    product types are sent without g:google_product_category.
+                    {channel.categoryHint}
                   </Text>
                 </BlockStack>
 
@@ -359,12 +400,12 @@ export default function FeedSettingsPage() {
                     </InlineStack>
 
                     {!row.custom && (
-                      <Select
-                        label="Google category"
-                        labelHidden
-                        options={categoryOptions}
+                      <CategoryCombobox
+                        taxonomyKey={taxonomyKey}
                         value={row.category ?? ""}
-                        onChange={(value) => updateRow(index, { category: value || null })}
+                        onSelect={(path) => updateRow(index, { category: path })}
+                        label={channel.categoryLabel}
+                        placeholder="Search categories…"
                       />
                     )}
 
@@ -378,7 +419,7 @@ export default function FeedSettingsPage() {
                       <TextField
                         label="Custom category"
                         labelHidden
-                        placeholder="Apparel & Accessories > Clothing > Shirts & Tops"
+                        placeholder={channel.customCategoryPlaceholder}
                         value={row.customValue ?? ""}
                         onChange={(value) => updateRow(index, { customValue: value })}
                         autoComplete="off"
@@ -457,12 +498,48 @@ export default function FeedSettingsPage() {
               </BlockStack>
             </Card>
 
+            {channel.fields.includes("delivery_time") && (
+              <Card>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text as="h2" variant="headingMd">
+                      Delivery
+                    </Text>
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      Sent with every item in the feed — this channel requires it.
+                    </Text>
+                  </BlockStack>
+
+                  <TextField
+                    label="Delivery time (days)"
+                    type="number"
+                    min={0}
+                    value={deliveryForm.timeDaysRaw}
+                    onChange={(value) => setDeliveryForm((d) => ({ ...d, timeDaysRaw: value }))}
+                    error={deliveryErrors.timeDaysError}
+                    autoComplete="off"
+                    helpText="0 means in stock / ships today"
+                  />
+                  <TextField
+                    label="Delivery cost"
+                    type="number"
+                    min={0}
+                    value={deliveryForm.costMajorRaw}
+                    onChange={(value) => setDeliveryForm((d) => ({ ...d, costMajorRaw: value }))}
+                    error={deliveryErrors.costMajorError}
+                    placeholder="Leave empty to omit — enter 0 for free delivery"
+                    autoComplete="off"
+                  />
+                </BlockStack>
+              </Card>
+            )}
+
             <InlineStack align="end">
               <Button
                 variant="primary"
                 onClick={handleSave}
                 loading={isSaving}
-                disabled={isSaving || !priceErrors.valid}
+                disabled={isSaving || !priceErrors.valid || !deliveryErrors.valid}
               >
                 Save
               </Button>
